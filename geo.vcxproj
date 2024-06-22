@@ -181,6 +181,8 @@
     <ClInclude Include="khrplatform.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include=".gitattributes" />
+    <None Include=".gitignore" />
     <None Include="world.fragment.glsl" />
     <None Include="sky.fragment.glsl" />
     <None Include="sky.vertex.glsl" />

@@ -145,6 +145,7 @@ private:
 
 private:
 	GLFWwindow* _window;
+	bool _locked;
 
 private:
 	static constexpr glm::vec3 _up{ 0, 1, 0 };
@@ -170,11 +171,14 @@ private:
 	{
 		glfwGetCursorPos(_window, &_mouse_x, &_mouse_y);
 
-		_yaw -= (_mouse_x_old - _mouse_x) * _sensitivity;
-		_pitch -= (_mouse_y_old - _mouse_y) * _sensitivity;
+		if (_locked)
+		{
+			_yaw -= (_mouse_x_old - _mouse_x) * _sensitivity;
+			_pitch -= (_mouse_y_old - _mouse_y) * _sensitivity;
 
-		_yaw = std::fmod(_yaw, glm::two_pi<float>());
-		_pitch = glm::clamp(_pitch, glm::radians(-85.0f), glm::radians(85.0f));
+			_yaw = std::fmod(_yaw, glm::two_pi<float>());
+			_pitch = glm::clamp(_pitch, glm::radians(-85.0f), glm::radians(85.0f));
+		}
 
 		_mouse_x_old = _mouse_x;
 		_mouse_y_old = _mouse_y;
@@ -221,37 +225,70 @@ public:
 		poll_mouse();
 		update_dir();
 		integrate(delta_time);
+
+		if (glfwGetMouseButton(_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+		{
+			glfwSetInputMode(_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			_locked = true;
+		}
+
+		else
+		{
+			glfwSetInputMode(_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			_locked = false;
+		}
 	}
 
 public:
 	camera(const glm::vec3 pos, const float yaw, const float pitch, GLFWwindow* window, const float sensitivity)
-		: _pos{ pos }, _yaw{ yaw }, _pitch{ pitch }, _window{ window }, _sensitivity{ sensitivity }
+		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _window{ window }, _sensitivity{ sensitivity }
 	{
 		update_dir();
 	}
 };
 
+template<typename T>
 class buffer
 {
 private:
 	const GLuint _type;
-	GLuint _id;
+	GLuint _buffer_id;
+
+private:
+	const std::vector<T>& _data;
+
+private:
+	static GLuint _attribute_id;
 
 public:
 	void bind()
 	{
-		glBindBuffer(_type, _id);
+		const auto stride = sizeof(std::remove_reference_t<decltype(_data)>::value_type);
+		const auto size = stride * _data.size();
+
+		glBindBuffer(_type, _buffer_id);
+#pragma message("SUPPORT MORE THAN JUST STATIC DRAW WHEN POSSIBLE!")
+		glBufferData(_type, stride * size, _data.data(), GL_STATIC_DRAW);
+	}
+
+	void add_attribute(const GLuint element_count, const GLuint stride, const std::size_t offset)
+	{
+		glVertexAttribPointer(_attribute_id, element_count, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offset));
+		glEnableVertexAttribArray(_attribute_id);
+		_attribute_id++;
 	}
 
 public:
-	buffer(const GLuint type)
-		: _type{ type }
+	buffer(const GLuint type, const std::vector<T>& data)
+		: _type{ type }, _data{ data }
 	{
-		glGenBuffers(1, &_id);
+		glGenBuffers(1, &_buffer_id);
 		bind();
 	}
 };
 
+template<typename T>
+GLuint buffer<T>::_attribute_id = 0;
 
 int main(int argc, char** argv)
 {
@@ -330,33 +367,22 @@ int main(int argc, char** argv)
 		{ {  1.0f, -1.0f,  1.0f, 1.0f, }, { 0.982f,  0.099f,  0.879f, }, { 0.0f, 0.0f, 0.0f }, },
 	};
 
-	const auto num_verts = verts.size();
-
-	std::vector<vertex> vup(num_verts);
-	std::vector<vertex> world(num_verts);
-	std::vector<vertex> skybox(num_verts);
+	std::vector<vertex> world(verts.size());
+	std::vector<vertex> skybox(verts.size());
 
 	
 	
+	static constexpr auto stride = sizeof(vertex);
 
-	buffer vertex_buffer{ GL_ARRAY_BUFFER };
-
-	constexpr auto stride = sizeof(vertex);
+	buffer vertex_buffer{ GL_ARRAY_BUFFER, world };
+	vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
+	vertex_buffer.add_attribute(3, stride, offsetof(vertex, col));
+	vertex_buffer.add_attribute(3, stride, offsetof(vertex, norm));
+	//vertex_buffer.bind();
 	
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(vertex, pos)));
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(vertex, col)));
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(vertex, norm)));
-
-
-	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
-	glEnableVertexAttribArray(2);
-
-
-	//skybox
-	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(vertex, pos)));
-	glEnableVertexAttribArray(3);
-
+	buffer sky_vertex_buffer{ GL_ARRAY_BUFFER, skybox };
+	sky_vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
+	//sky_vertex_buffer.bind();
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
@@ -364,18 +390,19 @@ int main(int argc, char** argv)
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
-	const auto rotation = glm::quarter_pi<float>();
-	const auto t = glm::translate(glm::vec3{ 0.0f, 0.0f, 0.0f });
-	const auto r = glm::rotate(glm::identity<glm::mat4>(), rotation, glm::vec3{ 0.0f, 0.0f, 1.0f });
-	const auto s = glm::scale(glm::vec3{ 5.0, 0.5f, 5.0f });
-	const auto m = t * r * s;
+	//const auto rotation = glm::quarter_pi<float>();
+	//const auto t = glm::translate(glm::vec3{ 0.0f, 0.0f, 0.0f });
+	//const auto r = glm::rotate(glm::identity<glm::mat4>(), rotation, glm::vec3{ 0.0f, 0.0f, 1.0f });
+	//const auto s = glm::scale(glm::vec3{ 5.0, 0.5f, 5.0f });
+	//const auto m = t * r * s;
+	const auto m = glm::mat4(1.0f);
 
 	//view matrix is created inside the loop
 
 	auto fov = 90.0f;
 
 	//compute per-vertex normals
-	for (auto i = 0; i < num_verts; i += 3)
+	for (auto i = 0; i < verts.size(); i += 3)
 	{
 		glm::vec3 v0 = m * verts[i + 0].pos;
 		glm::vec3 v1 = m * verts[i + 1].pos;
@@ -392,7 +419,7 @@ int main(int argc, char** argv)
 	}
 
 
-	for (auto i = 0; i < num_verts; i++)
+	for (auto i = 0; i < verts.size(); i++)
 	{
 		world[i].col = verts[i].col;
 		world[i].norm = verts[i].norm;
@@ -403,47 +430,46 @@ int main(int argc, char** argv)
 
 	auto last_time = 0.0;
 
-	camera camera{ { 0.0f, 1.0f, 6.0f }, -glm::half_pi<float>(), -0.5f, window, 0.002f };
+	camera camera{ { 0.0f, 2.0f, 6.0f }, glm::radians(-90.0f), glm::radians(-10.0f), window, 0.002f};
 
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	auto toggle = false, flag = false;
 
 	while (!glfwWindowShouldClose(window))
 	{
-		auto current_time = glfwGetTime();
-		float delta_time = current_time - last_time;
+		const auto current_time = glfwGetTime();
+		const float delta_time = current_time - last_time;
 		last_time = current_time;
 
 
 		const auto forward = camera.forward(), up = camera.up(), right = camera.right();
 
 
-		if (auto action = glfwGetKey(window, GLFW_KEY_W); action == GLFW_REPEAT || action == GLFW_PRESS)
+		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
 			camera.vel() -= forward * (CAMERA_SPEED * delta_time);
-		else if (auto action = glfwGetKey(window, GLFW_KEY_S); action == GLFW_REPEAT || action == GLFW_PRESS)
+		else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 			camera.vel() += forward * (CAMERA_SPEED * delta_time);
 
-		if (auto action = glfwGetKey(window, GLFW_KEY_A); action == GLFW_REPEAT || action == GLFW_PRESS)
+		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
 			camera.vel() += right * (CAMERA_SPEED * delta_time);
-		else if (auto action = glfwGetKey(window, GLFW_KEY_D); action == GLFW_REPEAT || action == GLFW_PRESS)
+		else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 			camera.vel() -= right * (CAMERA_SPEED * delta_time);
 
-		if (auto action = glfwGetKey(window, GLFW_KEY_SPACE); action == GLFW_REPEAT || action == GLFW_PRESS)
+		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
 			camera.vel() += up * (CAMERA_SPEED * delta_time);
-		else if (auto action = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT); action == GLFW_REPEAT || action == GLFW_PRESS)
+		else if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
 			camera.vel() -= up * (CAMERA_SPEED * delta_time);
 
 		if (flag)
 		{
-			if (glfwGetMouseButton(window, 2) == GLFW_RELEASE)
+			if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_RELEASE)
 			{
 				toggle = !toggle;
 				flag = false;
 			}
 		}
 
-		if (glfwGetMouseButton(window, 2) == GLFW_PRESS)
+		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS)
 		{
 			flag = true;
 		}
@@ -456,12 +482,6 @@ int main(int argc, char** argv)
 		{
 			fov = 90.0f;
 		}
-
-
-		//if (auto action = glfwGetKey(window, GLFW_KEY_LEFT); action == GLFW_REPEAT || action == GLFW_PRESS)
-		//	rotation += delta_time;
-		//else if (auto action = glfwGetKey(window, GLFW_KEY_RIGHT); action == GLFW_REPEAT || action == GLFW_PRESS)
-		//	rotation -= delta_time;
 
 		camera.update(delta_time);
 		
@@ -479,31 +499,30 @@ int main(int argc, char** argv)
 		const auto sky_imvp = glm::inverse(sky_mvp); // inverse for skybox
 
 //#pragma omp parallel for
-		for (auto i = 0; i < num_verts; i++)
+		for (auto i = 0; i < verts.size(); i++)
 		{
 			world[i].pos = mvp * verts[i].pos;
 			skybox[i].pos = sky_mvp * verts[i].pos;
 		}
 
-		
+		glClear(GL_DEPTH_BUFFER_BIT);
 
-		glClearColor(0.2f, 0.2f, 0.2f, 0.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		
-
-		glBufferData(GL_ARRAY_BUFFER, stride * num_verts, world.data(), GL_STATIC_DRAW);
-		world_program.use();
-		glFrontFace(GL_CCW);
-		glDrawArrays(GL_TRIANGLES, 0, num_verts);
-
-		
-		
 		sky_program.use();
 		sky_program.upload_matrix(sky_imvp, "sky_imvp");
-
-		glBufferData(GL_ARRAY_BUFFER, stride * num_verts, skybox.data(), GL_STATIC_DRAW);
+		
+		sky_vertex_buffer.bind();
 		glFrontFace(GL_CW);
-		glDrawArrays(GL_TRIANGLES, 0, num_verts);
+		glDrawArrays(GL_TRIANGLES, 0, verts.size());
+
+
+		world_program.use();
+		
+		vertex_buffer.bind();
+		glFrontFace(GL_CCW);
+		glDrawArrays(GL_TRIANGLES, 0, verts.size());
+
+		
+		
 
 
 		glfwSwapBuffers(window);
