@@ -129,6 +129,101 @@ public:
 	}
 };
 
+template<typename T>
+class buffer
+{
+private:
+	const GLuint _type;
+	GLuint _buffer_id;
+
+private:
+	const std::vector<T>& _data;
+
+private:
+	static GLuint _attribute_id;
+
+public:
+	void bind()
+	{
+		const auto stride = sizeof(std::remove_reference_t<decltype(_data)>::value_type);
+		const auto size = stride * _data.size();
+
+		glBindBuffer(_type, _buffer_id);
+#pragma message("SUPPORT MORE THAN JUST STATIC DRAW WHEN POSSIBLE!")
+		glBufferData(_type, stride * size, _data.data(), GL_STATIC_DRAW);
+	}
+
+	void add_attribute(const GLuint element_count, const GLuint stride, const std::size_t offset)
+	{
+		glVertexAttribPointer(_attribute_id, element_count, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offset));
+		glEnableVertexAttribArray(_attribute_id);
+		_attribute_id++;
+	}
+
+public:
+	buffer(const GLuint type, const std::vector<T>& data)
+		: _type{ type }, _data{ data }
+	{
+		glGenBuffers(1, &_buffer_id);
+		bind();
+	}
+};
+
+template<typename T>
+GLuint buffer<T>::_attribute_id = 0;
+
+
+class window
+{
+private:
+	GLFWwindow* _window;
+
+public:
+	decltype(_window)& handle()
+	{
+		return _window;
+	}
+
+public:
+	bool running() const
+	{
+		return !glfwWindowShouldClose(_window);
+	}
+
+public:
+	void key_action(int key, auto callable)
+	{
+		if (glfwGetKey(_window, key) == GLFW_PRESS)
+		{
+			callable();
+		}
+	}
+
+public:
+	window(const int width, const int height, std::string_view title)
+	{
+		if (!glfwInit())
+		{
+			PANIC("Failed to initialize GLFW");
+		}
+
+		_window = glfwCreateWindow(width, height, title.data(), NULL, NULL);
+
+		if (_window == NULL)
+		{
+			PANIC("Failed to create GLFW window");
+		}
+
+		glfwMakeContextCurrent(_window);
+
+		if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0)
+		{
+			PANIC("Failed to load GLAD function pointers");
+		}
+	}
+};
+
+
 class camera
 {
 private:
@@ -153,7 +248,7 @@ private:
 public:
 	const glm::vec3 forward() const
 	{
-		return glm::normalize(glm::vec3{ _dir.x, 0.0f, _dir.z });
+		return glm::normalize(glm::vec3{ -_dir.x, 0.0f, -_dir.z });
 	}
 
 	const glm::vec3 up() const
@@ -173,8 +268,8 @@ private:
 
 		if (_locked)
 		{
-			_yaw -= (_mouse_x_old - _mouse_x) * _sensitivity;
-			_pitch -= (_mouse_y_old - _mouse_y) * _sensitivity;
+			_yaw -= static_cast<float>(_mouse_x_old - _mouse_x) * _sensitivity;
+			_pitch -= static_cast<float>(_mouse_y_old - _mouse_y) * _sensitivity;
 
 			_yaw = std::fmod(_yaw, glm::two_pi<float>());
 			_pitch = glm::clamp(_pitch, glm::radians(-85.0f), glm::radians(85.0f));
@@ -240,81 +335,20 @@ public:
 	}
 
 public:
-	camera(const glm::vec3 pos, const float yaw, const float pitch, GLFWwindow* window, const float sensitivity)
-		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _window{ window }, _sensitivity{ sensitivity }
+	camera(const glm::vec3 pos, const float yaw, const float pitch, window& window, const float sensitivity)
+		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _window{ window.handle() }, _sensitivity{ sensitivity }
 	{
 		update_dir();
 	}
 };
 
-template<typename T>
-class buffer
-{
-private:
-	const GLuint _type;
-	GLuint _buffer_id;
-
-private:
-	const std::vector<T>& _data;
-
-private:
-	static GLuint _attribute_id;
-
-public:
-	void bind()
-	{
-		const auto stride = sizeof(std::remove_reference_t<decltype(_data)>::value_type);
-		const auto size = stride * _data.size();
-
-		glBindBuffer(_type, _buffer_id);
-#pragma message("SUPPORT MORE THAN JUST STATIC DRAW WHEN POSSIBLE!")
-		glBufferData(_type, stride * size, _data.data(), GL_STATIC_DRAW);
-	}
-
-	void add_attribute(const GLuint element_count, const GLuint stride, const std::size_t offset)
-	{
-		glVertexAttribPointer(_attribute_id, element_count, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offset));
-		glEnableVertexAttribArray(_attribute_id);
-		_attribute_id++;
-	}
-
-public:
-	buffer(const GLuint type, const std::vector<T>& data)
-		: _type{ type }, _data{ data }
-	{
-		glGenBuffers(1, &_buffer_id);
-		bind();
-	}
-};
-
-template<typename T>
-GLuint buffer<T>::_attribute_id = 0;
-
 int main(int argc, char** argv)
 {
-	if (!glfwInit())
-	{
-		PANIC("Failed to intiialize GLFW");
-	}
-
 	//static constexpr auto WIDTH = 1280, HEIGHT = 720;
 	static constexpr auto WIDTH = 2560, HEIGHT = 1440;
 	static constexpr auto CAMERA_SPEED = 5.0f;
 
-
-	auto* window = glfwCreateWindow(WIDTH, HEIGHT, "geo", NULL, NULL);
-	if (window == NULL)
-	{
-		glfwTerminate();
-		PANIC("Failed to create a GLFW window");
-	}
-
-	glfwMakeContextCurrent(window);
-
-	if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
-	{
-		PANIC("Failed to initialize GLAD");
-	}
+	window window{ WIDTH, HEIGHT, "geo" };
 
 	shader_program world_program{ "C:/Users/linkc/Desktop/geo/world" };
 	shader_program sky_program{ "C:/Users/linkc/Desktop/geo/sky" };
@@ -378,11 +412,9 @@ int main(int argc, char** argv)
 	vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
 	vertex_buffer.add_attribute(3, stride, offsetof(vertex, col));
 	vertex_buffer.add_attribute(3, stride, offsetof(vertex, norm));
-	//vertex_buffer.bind();
 	
 	buffer sky_vertex_buffer{ GL_ARRAY_BUFFER, skybox };
 	sky_vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
-	//sky_vertex_buffer.bind();
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
@@ -432,52 +464,29 @@ int main(int argc, char** argv)
 
 	camera camera{ { 0.0f, 2.0f, 6.0f }, glm::radians(-90.0f), glm::radians(-10.0f), window, 0.002f};
 
-
-	auto toggle = false, flag = false;
-
-	while (!glfwWindowShouldClose(window))
+	while (window.running())
 	{
 		const auto current_time = glfwGetTime();
-		const float delta_time = current_time - last_time;
+		const auto delta_time = static_cast<float>(current_time - last_time);
 		last_time = current_time;
 
 
 		const auto forward = camera.forward(), up = camera.up(), right = camera.right();
 
+		window.key_action(GLFW_KEY_W, [&]() { camera.vel() += forward * (CAMERA_SPEED * delta_time); });
+		window.key_action(GLFW_KEY_S, [&]() { camera.vel() -= forward * (CAMERA_SPEED * delta_time); });
 
-		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-			camera.vel() -= forward * (CAMERA_SPEED * delta_time);
-		else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-			camera.vel() += forward * (CAMERA_SPEED * delta_time);
+		window.key_action(GLFW_KEY_D, [&]() { camera.vel() += right * (CAMERA_SPEED * delta_time); });
+		window.key_action(GLFW_KEY_A, [&]() { camera.vel() -= right * (CAMERA_SPEED * delta_time); });
 
-		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-			camera.vel() += right * (CAMERA_SPEED * delta_time);
-		else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-			camera.vel() -= right * (CAMERA_SPEED * delta_time);
+		window.key_action(GLFW_KEY_SPACE, [&]() { camera.vel() += up * (CAMERA_SPEED * delta_time); });
+		window.key_action(GLFW_KEY_LEFT_SHIFT, [&]() { camera.vel() -= up * (CAMERA_SPEED * delta_time); });
 
-		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-			camera.vel() += up * (CAMERA_SPEED * delta_time);
-		else if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-			camera.vel() -= up * (CAMERA_SPEED * delta_time);
-
-		if (flag)
-		{
-			if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_RELEASE)
-			{
-				toggle = !toggle;
-				flag = false;
-			}
-		}
-
-		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS)
-		{
-			flag = true;
-		}
-
-		if (toggle)
+		if (glfwGetMouseButton(window.handle(), GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS)
 		{
 			fov = 60.0f;
 		}
+
 		else
 		{
 			fov = 90.0f;
@@ -486,8 +495,6 @@ int main(int argc, char** argv)
 		camera.update(delta_time);
 		
 		const auto p = glm::perspectiveFov(glm::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 0.1f, 100.0f);
-
-
 
 		const auto v = glm::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
 
@@ -512,20 +519,17 @@ int main(int argc, char** argv)
 		
 		sky_vertex_buffer.bind();
 		glFrontFace(GL_CW);
-		glDrawArrays(GL_TRIANGLES, 0, verts.size());
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
 
 
 		world_program.use();
 		
 		vertex_buffer.bind();
 		glFrontFace(GL_CCW);
-		glDrawArrays(GL_TRIANGLES, 0, verts.size());
-
-		
-		
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
 
 
-		glfwSwapBuffers(window);
+		glfwSwapBuffers(window.handle());
 		glfwPollEvents();
 	}
 }
