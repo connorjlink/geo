@@ -5,6 +5,9 @@
 #include <fstream>
 #include <filesystem>
 #include <cassert>
+#include <thread>
+#include <chrono>
+#include <atomic>
 
 #include <cstdlib>
 #include <cmath>
@@ -146,7 +149,7 @@ public:
 	void bind()
 	{
 		const auto stride = sizeof(std::remove_reference_t<decltype(_data)>::value_type);
-		const auto size = stride * _data.size();
+		const auto size = _data.size();
 
 		glBindBuffer(_type, _buffer_id);
 #pragma message("SUPPORT MORE THAN JUST STATIC DRAW WHEN POSSIBLE!")
@@ -227,7 +230,7 @@ public:
 class camera
 {
 private:
-	glm::vec3 _pos, _dir;
+	glm::vec3 _pos, _dir, _acc;
 	glm::vec3 _vel;
 	float _yaw, _pitch;
 
@@ -292,7 +295,13 @@ private:
 	void integrate(float delta_time)
 	{
 		_pos += _vel * delta_time;
-		_vel -= _vel * delta_time * 0.99f;
+		_vel += _acc * delta_time;
+		_acc = -_vel;
+
+		if (glm::length(_vel) < 0.01f)
+		{
+			_vel = glm::vec3{ 0.0f };
+		}
 	}
 
 public:
@@ -344,8 +353,8 @@ public:
 
 int main(int argc, char** argv)
 {
-	//static constexpr auto WIDTH = 1280, HEIGHT = 720;
-	static constexpr auto WIDTH = 2560, HEIGHT = 1440;
+	static constexpr auto WIDTH = 1280, HEIGHT = 720;
+	//static constexpr auto WIDTH = 2560, HEIGHT = 1440;
 	static constexpr auto CAMERA_SPEED = 5.0f;
 
 	window window{ WIDTH, HEIGHT, "geo" };
@@ -401,18 +410,29 @@ int main(int argc, char** argv)
 		{ {  1.0f, -1.0f,  1.0f, 1.0f, }, { 0.982f,  0.099f,  0.879f, }, { 0.0f, 0.0f, 0.0f }, },
 	};
 
-	std::vector<vertex> world(verts.size());
-	std::vector<vertex> skybox(verts.size());
+	std::vector<vertex> skybox_verts(verts.size());
+	std::copy(verts.begin(), verts.end(), skybox_verts.begin());
 
-	
+	std::vector<vertex> skybox(skybox_verts.size());
+
+	//verts.reserve(verts.size() * 16);
+	//
+	//verts.insert(verts.end(), verts.begin(), verts.end());
+	//verts.insert(verts.end(), verts.begin(), verts.end());
+	//verts.insert(verts.end(), verts.begin(), verts.end());
+	//verts.insert(verts.end(), verts.begin(), verts.end());
+
+	std::vector<vertex> world(verts.size());
 	
 	static constexpr auto stride = sizeof(vertex);
 
-	buffer vertex_buffer{ GL_ARRAY_BUFFER, world };
-	vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
-	vertex_buffer.add_attribute(3, stride, offsetof(vertex, col));
-	vertex_buffer.add_attribute(3, stride, offsetof(vertex, norm));
-	
+
+	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world };
+	world_vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
+	world_vertex_buffer.add_attribute(3, stride, offsetof(vertex, col));
+	world_vertex_buffer.add_attribute(3, stride, offsetof(vertex, norm));
+
+
 	buffer sky_vertex_buffer{ GL_ARRAY_BUFFER, skybox };
 	sky_vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
 
@@ -427,7 +447,7 @@ int main(int argc, char** argv)
 	//const auto r = glm::rotate(glm::identity<glm::mat4>(), rotation, glm::vec3{ 0.0f, 0.0f, 1.0f });
 	//const auto s = glm::scale(glm::vec3{ 5.0, 0.5f, 5.0f });
 	//const auto m = t * r * s;
-	const auto m = glm::mat4(1.0f);
+	auto m = glm::mat4(1.0f);
 
 	//view matrix is created inside the loop
 
@@ -470,17 +490,14 @@ int main(int argc, char** argv)
 		const auto delta_time = static_cast<float>(current_time - last_time);
 		last_time = current_time;
 
+		window.key_action(GLFW_KEY_W, [&]() { camera.vel() += camera.forward() * (CAMERA_SPEED * delta_time); });
+		window.key_action(GLFW_KEY_S, [&]() { camera.vel() -= camera.forward() * (CAMERA_SPEED * delta_time); });
 
-		const auto forward = camera.forward(), up = camera.up(), right = camera.right();
+		window.key_action(GLFW_KEY_D, [&]() { camera.vel() += camera.right() * (CAMERA_SPEED * delta_time); });
+		window.key_action(GLFW_KEY_A, [&]() { camera.vel() -= camera.right() * (CAMERA_SPEED * delta_time); });
 
-		window.key_action(GLFW_KEY_W, [&]() { camera.vel() += forward * (CAMERA_SPEED * delta_time); });
-		window.key_action(GLFW_KEY_S, [&]() { camera.vel() -= forward * (CAMERA_SPEED * delta_time); });
-
-		window.key_action(GLFW_KEY_D, [&]() { camera.vel() += right * (CAMERA_SPEED * delta_time); });
-		window.key_action(GLFW_KEY_A, [&]() { camera.vel() -= right * (CAMERA_SPEED * delta_time); });
-
-		window.key_action(GLFW_KEY_SPACE, [&]() { camera.vel() += up * (CAMERA_SPEED * delta_time); });
-		window.key_action(GLFW_KEY_LEFT_SHIFT, [&]() { camera.vel() -= up * (CAMERA_SPEED * delta_time); });
+		window.key_action(GLFW_KEY_SPACE, [&]() { camera.vel() += camera.up() * (CAMERA_SPEED * delta_time); });
+		window.key_action(GLFW_KEY_LEFT_SHIFT, [&]() { camera.vel() -= camera.up() * (CAMERA_SPEED * delta_time); });
 
 		if (glfwGetMouseButton(window.handle(), GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS)
 		{
@@ -493,41 +510,54 @@ int main(int argc, char** argv)
 		}
 
 		camera.update(delta_time);
-		
+
 		const auto p = glm::perspectiveFov(glm::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 0.1f, 100.0f);
 
 		const auto v = glm::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
 
 		const auto pv = p * v;
-		const auto mvp = pv * m;
 
-		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 10.0f });
+		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 50.0f });
 		const auto sky_mvp = pv * sky_m;
 		const auto sky_imvp = glm::inverse(sky_mvp); // inverse for skybox
 
-//#pragma omp parallel for
-		for (auto i = 0; i < verts.size(); i++)
+		for (auto i = 0; i < skybox_verts.size(); i++)
 		{
-			world[i].pos = mvp * verts[i].pos;
-			skybox[i].pos = sky_mvp * verts[i].pos;
+			skybox[i].pos = sky_mvp * skybox_verts[i].pos;
 		}
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
+		auto len = 16;
+
+		for (auto k = 0; k < len * len * len; k++)
+		{
+			for (auto i = 0; i < verts.size(); i++)
+			{
+				auto x = (k / (len * len));
+				auto y = ((k / len) % len);
+				auto z = (k % len);
+
+				m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
+
+				const auto mvp = pv * m;
+
+				world[i].pos = mvp * verts[i].pos;
+			}
+
+			world_program.use();
+
+			world_vertex_buffer.bind();
+			glFrontFace(GL_CCW);
+			glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
+		}
+
 		sky_program.use();
 		sky_program.upload_matrix(sky_imvp, "sky_imvp");
-		
+
 		sky_vertex_buffer.bind();
 		glFrontFace(GL_CW);
-		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
-
-
-		world_program.use();
-		
-		vertex_buffer.bind();
-		glFrontFace(GL_CCW);
-		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
-
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(skybox_verts.size()));
 
 		glfwSwapBuffers(window.handle());
 		glfwPollEvents();
