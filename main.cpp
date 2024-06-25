@@ -9,6 +9,7 @@
 #include <chrono>
 #include <atomic>
 
+#include <array>
 #include <cstdlib>
 #include <cmath>
 
@@ -351,6 +352,27 @@ public:
 	}
 };
 
+class block
+{
+public:
+	glm::vec3 _color;
+	std::uint16_t _x : 4,
+				  _y : 4,
+				  _z : 4;
+};
+
+class subchunk
+{
+public:
+	std::array<std::array<std::array<block, 16>, 16>, 16> _blocks;
+};
+
+class chunk
+{
+public:
+	std::array<subchunk, 16> _subchunks;
+};
+
 int main(int argc, char** argv)
 {
 	static constexpr auto WIDTH = 1280, HEIGHT = 720;
@@ -362,6 +384,22 @@ int main(int argc, char** argv)
 	shader_program world_program{ "C:/Users/linkc/Desktop/geo/world" };
 	shader_program sky_program{ "C:/Users/linkc/Desktop/geo/sky" };
 
+
+	chunk* c = new chunk{};
+
+	for (auto s = 0; s < 16; s++)
+	{
+		for (auto i = 0; i < 16; i++)
+		{
+			for (auto j = 0; j < 16; j++)
+			{
+				for (auto k = 0; k < 16; k++)
+				{
+					c->_subchunks[s]._blocks[i][j][k] = block{ glm::vec3{ i / 16.0f, j / 16.0f, k / 16.0f } };
+				}
+			}
+		}
+	}
 
 	struct vertex
 	{
@@ -473,7 +511,7 @@ int main(int argc, char** argv)
 
 	for (auto i = 0; i < verts.size(); i++)
 	{
-		world[i].col = verts[i].col;
+		//world[i].col = verts[i].col;
 		world[i].norm = verts[i].norm;
 	}
 
@@ -511,13 +549,13 @@ int main(int argc, char** argv)
 
 		camera.update(delta_time);
 
-		const auto p = glm::perspectiveFov(glm::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 0.1f, 100.0f);
+		const auto p = glm::perspectiveFov(glm::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 0.1f, 1000.0f);
 
 		const auto v = glm::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
 
 		const auto pv = p * v;
 
-		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 50.0f });
+		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 700.0f });
 		const auto sky_mvp = pv * sky_m;
 		const auto sky_imvp = glm::inverse(sky_mvp); // inverse for skybox
 
@@ -528,9 +566,39 @@ int main(int argc, char** argv)
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
-		auto len = 16;
+		for (auto s = 0; s < 16; s++)
+		{
+			for (auto i = 0; i < 16; i++)
+			{
+				for (auto j = 0; j < 16; j++)
+				{
+					for (auto k = 0; k < 16; k++)
+					{
+						if (!(i > 0 && i < 15 && j > 0 && j < 15 && k > 0 && k < 15))
+						{
+							for (auto l = 0; l < verts.size(); l++)
+							{
+								m = glm::translate(glm::vec3{ (i * 2.0f), ((s * 16.0f) * 2.0f) + j * 2.0f, (k * 2.0f) });
 
-		for (auto k = 0; k < len * len * len; k++)
+								const auto mvp = pv * m;
+
+								//world[l].col = verts[l].col;
+								world[l].col = c->_subchunks[s]._blocks[i][j][k]._color;
+								world[l].pos = mvp * verts[l].pos;
+							}
+
+							world_program.use();
+							world_vertex_buffer.bind();
+							glFrontFace(GL_CCW);
+							glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
+						}
+					}
+				}
+			}
+		}
+		
+
+		/*for (auto k = 0; k < len * len * len; k++)
 		{
 			for (auto i = 0; i < verts.size(); i++)
 			{
@@ -538,19 +606,16 @@ int main(int argc, char** argv)
 				auto y = ((k / len) % len);
 				auto z = (k % len);
 
-				m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
+				
 
 				const auto mvp = pv * m;
 
+				world[i].col = verts[i].col;
 				world[i].pos = mvp * verts[i].pos;
 			}
 
-			world_program.use();
-
-			world_vertex_buffer.bind();
-			glFrontFace(GL_CCW);
-			glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
-		}
+			
+		}*/
 
 		sky_program.use();
 		sky_program.upload_matrix(sky_imvp, "sky_imvp");

@@ -13,7 +13,7 @@ float smin(float a, float b, float k)
 
 void main()
 {
-	vec3 sun = vec3(0.0f, 1.0f, 0.0f);
+	vec3 sun = vec3(1.0f, 1.0f, 1.0f);
 	
 	float intensity = dot(normal, sun);
 	intensity = smin(0.1, intensity, -0.2);
