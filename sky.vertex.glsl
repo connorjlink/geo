@@ -2,7 +2,7 @@
 
 uniform mat4 sky_imvp;
 
-layout (location = 3) in vec4 position;
+layout (location = 2) in vec4 position;
 
 out vec3 pos;
 

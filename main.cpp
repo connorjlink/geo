@@ -133,6 +133,9 @@ public:
 	}
 };
 
+// TODO: let's use attribute string names instead of IDs
+GLuint _attribute_id = 0;
+
 template<typename T>
 class buffer
 {
@@ -141,13 +144,10 @@ private:
 	GLuint _buffer_id;
 
 private:
-	const std::vector<T>& _data;
-
-private:
-	static GLuint _attribute_id;
+	std::vector<T>& _data;
 
 public:
-	void bind()
+	void static_bind()
 	{
 		const auto stride = sizeof(std::remove_reference_t<decltype(_data)>::value_type);
 		const auto size = _data.size();
@@ -157,24 +157,25 @@ public:
 		glBufferData(_type, stride * size, _data.data(), GL_STATIC_DRAW);
 	}
 
-	void add_attribute(const GLuint element_count, const GLuint stride, const std::size_t offset)
+
+
+	void add_attribute(const GLuint element_count, const GLuint element_type, const GLuint stride, const std::size_t offset)
 	{
-		glVertexAttribPointer(_attribute_id, element_count, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offset));
+		std::cout << "attribute id: " << _attribute_id << std::endl;
+		glVertexAttribPointer(_attribute_id, element_count, element_type, GL_FALSE, stride, reinterpret_cast<void*>(offset));
 		glEnableVertexAttribArray(_attribute_id);
 		_attribute_id++;
+		
 	}
 
 public:
-	buffer(const GLuint type, const std::vector<T>& data)
+	buffer(const GLuint type, std::vector<T>& data)
 		: _type{ type }, _data{ data }
 	{
 		glGenBuffers(1, &_buffer_id);
-		bind();
+		static_bind();
 	}
 };
-
-template<typename T>
-GLuint buffer<T>::_attribute_id = 0;
 
 
 class window
@@ -356,15 +357,21 @@ class block
 {
 public:
 	glm::vec3 _color;
-	std::uint16_t _x : 4,
-				  _y : 4,
-				  _z : 4;
+	std::uint8_t _shape : 6;
+	std::uint8_t _normal;
 };
 
 class subchunk
 {
 public:
-	std::array<std::array<std::array<block, 16>, 16>, 16> _blocks;
+	std::array<block*, 16 * 16 * 16> _blocks;
+
+public:
+	static constexpr auto CHUNK_LENGTH = 16;
+	block*& index(int x, int y, int z)
+	{
+		return _blocks[x + (CHUNK_LENGTH * (y + (CHUNK_LENGTH * z)))];
+	}
 };
 
 class chunk
@@ -395,90 +402,121 @@ int main(int argc, char** argv)
 			{
 				for (auto k = 0; k < 16; k++)
 				{
-					c->_subchunks[s]._blocks[i][j][k] = block{ glm::vec3{ i / 16.0f, j / 16.0f, k / 16.0f } };
 				}
 			}
 		}
 	}
+	
+	auto s = new subchunk{};
+
+
+	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+	{
+		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
+		{
+			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
+			{
+				s->index(x, y, z) = new block{ glm::vec3{ x / 16.0f, y / 16.0f, z / 16.0f } };
+			}
+		}
+	}
+
+
 
 	struct vertex
 	{
 		glm::vec4 pos;
 		glm::vec3 col;
-		glm::vec3 norm;
 	};
 
-	static std::vector<vertex> verts
+	static std::vector<glm::vec4> verts
 	{
-		{ { -1.0f, -1.0f, -1.0f, 1.0f, }, { 0.583f,  0.771f,  0.014f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f,  1.0f, 1.0f, }, { 0.609f,  0.115f,  0.436f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f,  1.0f, 1.0f, }, { 0.327f,  0.483f,  0.844f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f, -1.0f, 1.0f, }, { 0.822f,  0.569f,  0.201f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f, -1.0f, 1.0f, }, { 0.435f,  0.602f,  0.223f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f, -1.0f, 1.0f, }, { 0.310f,  0.747f,  0.185f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f,  1.0f, 1.0f, }, { 0.597f,  0.770f,  0.761f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f, -1.0f, 1.0f, }, { 0.559f,  0.436f,  0.730f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f, -1.0f, 1.0f, }, { 0.359f,  0.583f,  0.152f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f, -1.0f, 1.0f, }, { 0.483f,  0.596f,  0.789f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f, -1.0f, 1.0f, }, { 0.559f,  0.861f,  0.639f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f, -1.0f, 1.0f, }, { 0.195f,  0.548f,  0.859f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f, -1.0f, 1.0f, }, { 0.014f,  0.184f,  0.576f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f,  1.0f, 1.0f, }, { 0.771f,  0.328f,  0.970f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f, -1.0f, 1.0f, }, { 0.406f,  0.615f,  0.116f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f,  1.0f, 1.0f, }, { 0.676f,  0.977f,  0.133f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f,  1.0f, 1.0f, }, { 0.971f,  0.572f,  0.833f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f, -1.0f, 1.0f, }, { 0.140f,  0.616f,  0.489f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f,  1.0f, 1.0f, }, { 0.997f,  0.513f,  0.064f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f, -1.0f,  1.0f, 1.0f, }, { 0.945f,  0.719f,  0.592f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f,  1.0f, 1.0f, }, { 0.543f,  0.021f,  0.978f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f,  1.0f, 1.0f, }, { 0.279f,  0.317f,  0.505f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f, -1.0f, 1.0f, }, { 0.167f,  0.620f,  0.077f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f, -1.0f, 1.0f, }, { 0.347f,  0.857f,  0.137f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f, -1.0f, 1.0f, }, { 0.055f,  0.953f,  0.042f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f,  1.0f, 1.0f, }, { 0.714f,  0.505f,  0.345f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f,  1.0f, 1.0f, }, { 0.783f,  0.290f,  0.734f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f,  1.0f, 1.0f, }, { 0.722f,  0.645f,  0.174f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f, -1.0f, 1.0f, }, { 0.302f,  0.455f,  0.848f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f, -1.0f, 1.0f, }, { 0.225f,  0.587f,  0.040f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f,  1.0f, 1.0f, }, { 0.517f,  0.713f,  0.338f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f, -1.0f, 1.0f, }, { 0.053f,  0.959f,  0.120f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f,  1.0f, 1.0f, }, { 0.393f,  0.621f,  0.362f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f,  1.0f,  1.0f, 1.0f, }, { 0.673f,  0.211f,  0.457f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ { -1.0f,  1.0f,  1.0f, 1.0f, }, { 0.820f,  0.883f,  0.371f, }, { 0.0f, 0.0f, 0.0f }, },
-		{ {  1.0f, -1.0f,  1.0f, 1.0f, }, { 0.982f,  0.099f,  0.879f, }, { 0.0f, 0.0f, 0.0f }, },
+		{ -1.0f, -1.0f, -1.0f, 1.0f, },
+		{ -1.0f, -1.0f,  1.0f, 1.0f, },
+		{ -1.0f,  1.0f,  1.0f, 1.0f, },
+		{  1.0f,  1.0f, -1.0f, 1.0f, },
+		{ -1.0f, -1.0f, -1.0f, 1.0f, },
+		{ -1.0f,  1.0f, -1.0f, 1.0f, },
+		{  1.0f, -1.0f,  1.0f, 1.0f, },
+		{ -1.0f, -1.0f, -1.0f, 1.0f, },
+		{  1.0f, -1.0f, -1.0f, 1.0f, },
+		{  1.0f,  1.0f, -1.0f, 1.0f, },
+		{  1.0f, -1.0f, -1.0f, 1.0f, },
+		{ -1.0f, -1.0f, -1.0f, 1.0f, },
+		{ -1.0f, -1.0f, -1.0f, 1.0f, },
+		{ -1.0f,  1.0f,  1.0f, 1.0f, },
+		{ -1.0f,  1.0f, -1.0f, 1.0f, },
+		{  1.0f, -1.0f,  1.0f, 1.0f, },
+		{ -1.0f, -1.0f,  1.0f, 1.0f, },
+		{ -1.0f, -1.0f, -1.0f, 1.0f, },
+		{ -1.0f,  1.0f,  1.0f, 1.0f, },
+		{ -1.0f, -1.0f,  1.0f, 1.0f, },
+		{  1.0f, -1.0f,  1.0f, 1.0f, },
+		{  1.0f,  1.0f,  1.0f, 1.0f, },
+		{  1.0f, -1.0f, -1.0f, 1.0f, },
+		{  1.0f,  1.0f, -1.0f, 1.0f, },
+		{  1.0f, -1.0f, -1.0f, 1.0f, },
+		{  1.0f,  1.0f,  1.0f, 1.0f, },
+		{  1.0f, -1.0f,  1.0f, 1.0f, },
+		{  1.0f,  1.0f,  1.0f, 1.0f, },
+		{  1.0f,  1.0f, -1.0f, 1.0f, },
+		{ -1.0f,  1.0f, -1.0f, 1.0f, },
+		{  1.0f,  1.0f,  1.0f, 1.0f, },
+		{ -1.0f,  1.0f, -1.0f, 1.0f, },
+		{ -1.0f,  1.0f,  1.0f, 1.0f, },
+		{  1.0f,  1.0f,  1.0f, 1.0f, },
+		{ -1.0f,  1.0f,  1.0f, 1.0f, },
+		{  1.0f, -1.0f,  1.0f, 1.0f, },
 	};
 
-	std::vector<vertex> skybox_verts(verts.size());
-	std::copy(verts.begin(), verts.end(), skybox_verts.begin());
+	static std::vector<glm::vec4> cube_vertices
+	{
+		{  1.0f,  1.0f,  1.0f,    1.0f }, // 0 close top right
+		{  1.0f,  1.0f, -1.0f,    1.0f }, // 1 far top right
+		{ -1.0f,  1.0f,  1.0f,    1.0f }, // 2 close top left
+		{ -1.0f,  1.0f, -1.0f,    1.0f }, // 3 far top left
+							      
+		{  1.0f, -1.0f,  1.0f,    1.0f }, // 4 close bottom right
+		{  1.0f, -1.0f, -1.0f,    1.0f }, // 5 far bottom right
+		{ -1.0f, -1.0f,  1.0f,    1.0f }, // 6 close bottom left
+		{ -1.0f, -1.0f, -1.0f,    1.0f }, // 7 far bottom left
+	};
 
-	std::vector<vertex> skybox(skybox_verts.size());
+	static const std::vector<GLubyte> close_face{ 0, 2, 6,  6, 4, 0 },
+									    top_face{ 3, 2, 0,  0, 1, 3 },
+									   left_face{ 3, 7, 6,  6, 2, 3 },
+									  right_face{ 0, 4, 5,  5, 1, 0 },
+									    far_face{ 1, 5, 7,  7, 3, 1 },
+									 bottom_face{ 6, 7, 5,  5, 4, 6 };
 
-	//verts.reserve(verts.size() * 16);
-	//
-	//verts.insert(verts.end(), verts.begin(), verts.end());
-	//verts.insert(verts.end(), verts.begin(), verts.end());
-	//verts.insert(verts.end(), verts.begin(), verts.end());
-	//verts.insert(verts.end(), verts.begin(), verts.end());
 
-	std::vector<vertex> world(verts.size());
+	static std::vector<GLubyte> cube_indices(6 * 6);
+
+
+
+
+	
+	std::vector<vertex> world_vertices(cube_vertices.size());
 	
 	static constexpr auto stride = sizeof(vertex);
 
+	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices };
+	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(vertex, pos));
+	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(vertex, col));
+	
+	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, cube_indices };
 
-	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world };
-	world_vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
-	world_vertex_buffer.add_attribute(3, stride, offsetof(vertex, col));
-	world_vertex_buffer.add_attribute(3, stride, offsetof(vertex, norm));
 
-
+	std::vector<glm::vec4> skybox(verts.size());
 	buffer sky_vertex_buffer{ GL_ARRAY_BUFFER, skybox };
-	sky_vertex_buffer.add_attribute(4, stride, offsetof(vertex, pos));
+	sky_vertex_buffer.add_attribute(4, GL_FLOAT, sizeof(glm::vec4), NULL);
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
 
 	//const auto rotation = glm::quarter_pi<float>();
 	//const auto t = glm::translate(glm::vec3{ 0.0f, 0.0f, 0.0f });
@@ -487,33 +525,14 @@ int main(int argc, char** argv)
 	//const auto m = t * r * s;
 	auto m = glm::mat4(1.0f);
 
-	//view matrix is created inside the loop
+
+	auto compute_p = [&](float fov)
+	{
+		return glm::perspectiveFov(glm::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 1.0f, 10000.0f);
+	};
 
 	auto fov = 90.0f;
-
-	//compute per-vertex normals
-	for (auto i = 0; i < verts.size(); i += 3)
-	{
-		glm::vec3 v0 = m * verts[i + 0].pos;
-		glm::vec3 v1 = m * verts[i + 1].pos;
-		glm::vec3 v2 = m * verts[i + 2].pos;
-
-		glm::vec3 d1 = v1 - v0;
-		glm::vec3 d2 = v2 - v0;
-
-		glm::vec3 norm = glm::normalize(glm::cross(d1, d2));
-
-		verts[i + 0].norm = norm;
-		verts[i + 1].norm = norm;
-		verts[i + 2].norm = norm;
-	}
-
-
-	for (auto i = 0; i < verts.size(); i++)
-	{
-		//world[i].col = verts[i].col;
-		world[i].norm = verts[i].norm;
-	}
+	auto p = compute_p(fov);
 
 	glfwSwapInterval(0);
 
@@ -540,89 +559,157 @@ int main(int argc, char** argv)
 		if (glfwGetMouseButton(window.handle(), GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS)
 		{
 			fov = 60.0f;
+			p = compute_p(fov);
 		}
 
 		else
 		{
 			fov = 90.0f;
+			p = compute_p(fov);
 		}
 
 		camera.update(delta_time);
 
-		const auto p = glm::perspectiveFov(glm::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 0.1f, 1000.0f);
+		
 
 		const auto v = glm::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
 
 		const auto pv = p * v;
 
-		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 700.0f });
-		const auto sky_mvp = pv * sky_m;
-		const auto sky_imvp = glm::inverse(sky_mvp); // inverse for skybox
-
-		for (auto i = 0; i < skybox_verts.size(); i++)
-		{
-			skybox[i].pos = sky_mvp * skybox_verts[i].pos;
-		}
-
 		glClear(GL_DEPTH_BUFFER_BIT);
 
-		for (auto s = 0; s < 16; s++)
+
+		world_program.use();
+		glFrontFace(GL_CCW);
+
+		for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
 		{
-			for (auto i = 0; i < 16; i++)
+			for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
 			{
-				for (auto j = 0; j < 16; j++)
+				for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
 				{
-					for (auto k = 0; k < 16; k++)
+					for (auto i = 0; i < cube_vertices.size(); i++)
 					{
-						if (!(i > 0 && i < 15 && j > 0 && j < 15 && k > 0 && k < 15))
+						m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
+						const auto mvp = pv * m;
+
+						world_vertices[i].pos = mvp * cube_vertices[i];
+						world_vertices[i].col = glm::vec3{ (x / 16.0f), y / 16.0f, z / 16.0f };
+					}
+
+					cube_indices = {};
+
+					if (y + 1 < subchunk::CHUNK_LENGTH)
+					{
+						if (s->index(x, y + 1, z) == nullptr)
 						{
-							for (auto l = 0; l < verts.size(); l++)
-							{
-								m = glm::translate(glm::vec3{ (i * 2.0f), ((s * 16.0f) * 2.0f) + j * 2.0f, (k * 2.0f) });
-
-								const auto mvp = pv * m;
-
-								//world[l].col = verts[l].col;
-								world[l].col = c->_subchunks[s]._blocks[i][j][k]._color;
-								world[l].pos = mvp * verts[l].pos;
-							}
-
-							world_program.use();
-							world_vertex_buffer.bind();
-							glFrontFace(GL_CCW);
-							glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size()));
+							cube_indices.append_range(top_face);
 						}
+					}
+
+					else if (y == subchunk::CHUNK_LENGTH - 1)
+					{
+						cube_indices.append_range(top_face);
+					}
+
+
+					if (y - 1 > 0)
+					{
+						if (s->index(x, y - 1, z) == nullptr)
+						{
+							cube_indices.append_range(bottom_face);
+						}
+					}
+
+					else if (y == 0)
+					{
+						cube_indices.append_range(bottom_face);
+					}
+
+
+					if (x + 1 < subchunk::CHUNK_LENGTH)
+					{
+						if (s->index(x + 1, y, z) == nullptr)
+						{
+							cube_indices.append_range(right_face);
+						}
+					}
+
+					else if (x == subchunk::CHUNK_LENGTH - 1)
+					{
+						cube_indices.append_range(right_face);
+					}
+
+
+					if (x - 1 > 0)
+					{
+						if (s->index(x - 1, y, z) == nullptr)
+						{
+							cube_indices.append_range(left_face);
+						}
+					}
+
+					else if (x == 0)
+					{
+						cube_indices.append_range(left_face);
+					}
+
+
+					if (z + 1 < subchunk::CHUNK_LENGTH)
+					{
+						if (s->index(x, y, z + 1) == nullptr)
+						{
+							cube_indices.append_range(close_face);
+						}
+					}
+
+					else if (z == subchunk::CHUNK_LENGTH - 1)
+					{
+						cube_indices.append_range(close_face);
+					}
+
+
+					if (z - 1 > 0)
+					{
+						if (s->index(x, y, z - 1) == nullptr)
+						{
+							cube_indices.append_range(far_face);
+						}
+					}
+
+					else if (z == 0)
+					{
+						cube_indices.append_range(far_face);
+					}
+
+					
+					if (cube_indices.size() != 0)
+					{
+						world_vertex_buffer.static_bind();
+						world_index_buffer.static_bind();
+						glFrontFace(GL_CCW);
+						glDrawElements(GL_TRIANGLES, cube_indices.size(), GL_UNSIGNED_BYTE, nullptr);
 					}
 				}
 			}
 		}
-		
 
-		/*for (auto k = 0; k < len * len * len; k++)
+		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 1000.0f });
+		const auto sky_mvp = pv * sky_m;
+		const auto sky_imvp = glm::inverse(sky_mvp); // inverse for skybox
+		for (auto i = 0; i < verts.size(); i++)
 		{
-			for (auto i = 0; i < verts.size(); i++)
-			{
-				auto x = (k / (len * len));
-				auto y = ((k / len) % len);
-				auto z = (k % len);
-
-				
-
-				const auto mvp = pv * m;
-
-				world[i].col = verts[i].col;
-				world[i].pos = mvp * verts[i].pos;
-			}
-
-			
-		}*/
-
+			skybox[i] = sky_mvp * verts[i];
+		}
+		
 		sky_program.use();
 		sky_program.upload_matrix(sky_imvp, "sky_imvp");
+		
+		sky_vertex_buffer.static_bind();
 
-		sky_vertex_buffer.bind();
+		
 		glFrontFace(GL_CW);
-		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(skybox_verts.size()));
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(skybox.size()));
 
 		glfwSwapBuffers(window.handle());
 		glfwPollEvents();
