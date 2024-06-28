@@ -148,17 +148,15 @@ private:
 	std::vector<T>& _data;
 
 public:
-	void static_bind()
+	void bind(const GLuint hint = GL_STATIC_DRAW)
 	{
 		const auto stride = sizeof(std::remove_reference_t<decltype(_data)>::value_type);
 		const auto size = _data.size();
 
 		glBindBuffer(_type, _buffer_id);
 #pragma message("SUPPORT MORE THAN JUST STATIC DRAW WHEN POSSIBLE!")
-		glBufferData(_type, stride * size, _data.data(), GL_STATIC_DRAW);
+		glBufferData(_type, stride * size, _data.data(), hint);
 	}
-
-
 
 	void add_attribute(const GLuint element_count, const GLuint element_type, const GLuint stride, const std::size_t offset)
 	{
@@ -166,7 +164,11 @@ public:
 		glVertexAttribPointer(_attribute_id, element_count, element_type, GL_FALSE, stride, reinterpret_cast<void*>(offset));
 		glEnableVertexAttribArray(_attribute_id);
 		_attribute_id++;
-		
+	}
+
+	void base()
+	{
+		glBindBufferBase(_type, _attribute_id, _buffer_id);
 	}
 
 public:
@@ -174,7 +176,7 @@ public:
 		: _type{ type }, _data{ data }
 	{
 		glGenBuffers(1, &_buffer_id);
-		static_bind();
+		bind();
 	}
 };
 
@@ -354,12 +356,28 @@ public:
 	}
 };
 
+struct vertex
+{
+	glm::vec4 pos;
+	glm::vec3 col;
+};
+
 class block
 {
 public:
 	glm::vec3 _color;
-	std::uint8_t _shape : 6;
-	std::uint8_t _normal;
+	std::vector<vertex> _vertices;
+	std::vector<GLubyte> _indices;
+	std::vector<GLuint> _normals;
+
+public:
+	block(const glm::vec3 color)
+		: _color{ color }
+	{
+		_vertices = {};
+		_indices = {};
+		_normals = {};
+	}
 };
 
 class subchunk
@@ -409,27 +427,11 @@ int main(int argc, char** argv)
 		}
 	}
 	
-	auto s = new subchunk{};
-
-
-	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
-	{
-		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
-		{
-			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
-			{
-				s->index(x, y, z) = new block{ glm::vec3{ x / 16.0f, y / 16.0f, z / 16.0f } };
-			}
-		}
-	}
+	
 
 
 
-	struct vertex
-	{
-		glm::vec4 pos;
-		glm::vec3 col;
-	};
+	
 
 	static std::vector<glm::vec4> verts
 	{
@@ -514,24 +516,154 @@ int main(int argc, char** argv)
 	//std::reverse(bottom_face.begin(), bottom_face.end()); okay
 
 
+	auto s = new subchunk{};
+
+	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+	{
+		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
+		{
+			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
+			{
+				auto b = s->index(x, y, z);
+
+				b = new block{ glm::vec3{ x / 16.0f, y / 16.0f, z / 16.0f } };
+
+				for (auto i = 0; i < cube_vertices.size(); i++)
+				{
+					const auto m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
+					//const auto mvp = pv * m;
+
+					b->_vertices[i].pos = m * cube_vertices[i];
+					//world_vertices[i].pos = mvp * cube_vertices[i];
+
+					b->_vertices[i].col = glm::vec3
+					{
+						(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / 16.0f,
+						(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / 16.0f,
+						(z + ((cube_vertices[i].z + 1.0f) / 2.0f)) / 16.0f,
+					};
+				}
+
+				if (y + 1 < subchunk::CHUNK_LENGTH)
+				{
+					if (s->index(x, y + 1, z) == nullptr)
+					{
+						b->_indices.append_range(top_face);
+						b->_normals.emplace_back(TOP_FACE);
+					}
+				}
+
+				else if (y == subchunk::CHUNK_LENGTH - 1)
+				{
+					b->_indices.append_range(top_face);
+					b->_normals.emplace_back(TOP_FACE);
+				}
+
+
+				if (y - 1 > 0)
+				{
+					if (s->index(x, y - 1, z) == nullptr)
+					{
+						b->_indices.append_range(bottom_face);
+						b->_normals.emplace_back(BOTTOM_FACE);
+					}
+				}
+
+				else if (y == 0)
+				{
+					b->_indices.append_range(bottom_face);
+					b->_normals.emplace_back(BOTTOM_FACE);
+				}
+
+
+				if (x + 1 < subchunk::CHUNK_LENGTH)
+				{
+					if (s->index(x + 1, y, z) == nullptr)
+					{
+						b->_indices.append_range(right_face);
+						b->_normals.emplace_back(RIGHT_FACE);
+					}
+				}
+
+				else if (x == subchunk::CHUNK_LENGTH - 1)
+				{
+					b->_indices.append_range(right_face);
+					b->_normals.emplace_back(RIGHT_FACE);
+				}
+
+
+				if (x - 1 > 0)
+				{
+					if (s->index(x - 1, y, z) == nullptr)
+					{
+						b->_indices.append_range(left_face);
+						b->_normals.emplace_back(LEFT_FACE);
+					}
+				}
+
+				else if (x == 0)
+				{
+					b->_indices.append_range(left_face);
+					b->_normals.emplace_back(LEFT_FACE);
+				}
+
+
+				if (z + 1 < subchunk::CHUNK_LENGTH)
+				{
+					if (s->index(x, y, z + 1) == nullptr)
+					{
+						b->_indices.append_range(close_face);
+						b->_normals.emplace_back(CLOSE_FACE);
+					}
+				}
+
+				else if (z == subchunk::CHUNK_LENGTH - 1)
+				{
+					b->_indices.append_range(close_face);
+					b->_normals.emplace_back(CLOSE_FACE);
+				}
+
+
+				if (z - 1 > 0)
+				{
+					if (s->index(x, y, z - 1) == nullptr)
+					{
+						b->_indices.append_range(far_face);
+						b->_normals.emplace_back(FAR_FACE);
+					}
+				}
+
+				else if (z == 0)
+				{
+					b->_indices.append_range(far_face);
+					b->_normals.emplace_back(FAR_FACE);
+				}
+			}
+		}
+	}
+
+
 	
 	std::vector<vertex> world_vertices(cube_vertices.size());
 
-	std::vector<unsigned int> world_uniforms(1024);
+	std::vector<GLuint> world_normals(6);
+
 	
 	static constexpr auto stride = sizeof(vertex);
 
 	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices };
 	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(vertex, pos));
 	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(vertex, col));
-	//world_vertex_buffer.add_attribute(1, GL_UNSIGNED_BYTE, stride, offsetof(vertex, normal));
 	
-	//buffer world_uniform_buffer{ GL_UNIFORM_BUFFER, world_uniforms };
-	GLuint uniform_buffer;
-	glGenBuffers(1, &uniform_buffer);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniform_buffer);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(decltype(world_uniforms)::value_type) * world_uniforms.size(), world_uniforms.data(), GL_DYNAMIC_DRAW);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, uniform_buffer);
+	buffer world_normal_buffer{ GL_SHADER_STORAGE_BUFFER, world_normals };
+	//world_normal_buffer.bind();
+	world_normal_buffer.base();
+	
+	//GLuint normal_buffer;
+	//glGenBuffers(1, &normal_buffer);
+	//glBindBuffer(GL_SHADER_STORAGE_BUFFER, normal_buffer);
+	//glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(decltype(world_normals)::value_type)* world_normals.size(), world_normals.data(), GL_DYNAMIC_DRAW);
+	//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, normal_buffer);
 
 	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, cube_indices };
 
@@ -628,25 +760,30 @@ int main(int argc, char** argv)
 						const auto mvp = pv * m;
 
 						world_vertices[i].pos = mvp * cube_vertices[i];
-						world_vertices[i].col = glm::vec3{ (x / 16.0f), y / 16.0f, z / 16.0f };
+						world_vertices[i].col = glm::vec3
+						{ 
+							(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / 16.0f, 
+							(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / 16.0f, 
+							(z + ((cube_vertices[i].z + 1.0f) / 2.0f)) / 16.0f,
+						};
 					}
 
 					cube_indices = {};
-					world_uniforms = {};
+					world_normals = {};
 
 					if (y + 1 < subchunk::CHUNK_LENGTH)
 					{
 						if (s->index(x, y + 1, z) == nullptr)
 						{
 							cube_indices.append_range(top_face);
-							world_uniforms.emplace_back(TOP_FACE);
+							world_normals.emplace_back(TOP_FACE);
 						}
 					}
 
 					else if (y == subchunk::CHUNK_LENGTH - 1)
 					{
 						cube_indices.append_range(top_face);
-						world_uniforms.emplace_back(TOP_FACE);
+						world_normals.emplace_back(TOP_FACE);
 					}
 
 
@@ -655,14 +792,14 @@ int main(int argc, char** argv)
 						if (s->index(x, y - 1, z) == nullptr)
 						{
 							cube_indices.append_range(bottom_face);
-							world_uniforms.emplace_back(BOTTOM_FACE);
+							world_normals.emplace_back(BOTTOM_FACE);
 						}
 					}
 
 					else if (y == 0)
 					{
 						cube_indices.append_range(bottom_face);
-						world_uniforms.emplace_back(BOTTOM_FACE);
+						world_normals.emplace_back(BOTTOM_FACE);
 					}
 
 
@@ -671,14 +808,14 @@ int main(int argc, char** argv)
 						if (s->index(x + 1, y, z) == nullptr)
 						{
 							cube_indices.append_range(right_face);
-							world_uniforms.emplace_back(RIGHT_FACE);
+							world_normals.emplace_back(RIGHT_FACE);
 						}
 					}
 
 					else if (x == subchunk::CHUNK_LENGTH - 1)
 					{
 						cube_indices.append_range(right_face);
-						world_uniforms.emplace_back(RIGHT_FACE);
+						world_normals.emplace_back(RIGHT_FACE);
 					}
 
 
@@ -687,14 +824,14 @@ int main(int argc, char** argv)
 						if (s->index(x - 1, y, z) == nullptr)
 						{
 							cube_indices.append_range(left_face);
-							world_uniforms.emplace_back(LEFT_FACE);
+							world_normals.emplace_back(LEFT_FACE);
 						}
 					}
 
 					else if (x == 0)
 					{
 						cube_indices.append_range(left_face);
-						world_uniforms.emplace_back(LEFT_FACE);
+						world_normals.emplace_back(LEFT_FACE);
 					}
 
 
@@ -703,14 +840,14 @@ int main(int argc, char** argv)
 						if (s->index(x, y, z + 1) == nullptr)
 						{
 							cube_indices.append_range(close_face);
-							world_uniforms.emplace_back(CLOSE_FACE);
+							world_normals.emplace_back(CLOSE_FACE);
 						}
 					}
 
 					else if (z == subchunk::CHUNK_LENGTH - 1)
 					{
 						cube_indices.append_range(close_face);
-						world_uniforms.emplace_back(CLOSE_FACE);
+						world_normals.emplace_back(CLOSE_FACE);
 					}
 
 
@@ -719,27 +856,22 @@ int main(int argc, char** argv)
 						if (s->index(x, y, z - 1) == nullptr)
 						{
 							cube_indices.append_range(far_face);
-							world_uniforms.emplace_back(FAR_FACE);
-							world_uniforms.emplace_back(FAR_FACE);
+							world_normals.emplace_back(FAR_FACE);
 						}
 					}
 
 					else if (z == 0)
 					{
 						cube_indices.append_range(far_face);
-						world_uniforms.emplace_back(FAR_FACE);
+						world_normals.emplace_back(FAR_FACE);
 					}
 					
 
 					if (cube_indices.size() != 0)
 					{
-						world_vertex_buffer.static_bind();
-						world_index_buffer.static_bind();
-						//world_uniform_buffer.static_bind();
-						glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniform_buffer);
-						glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(vertex)* world_uniforms.size(), world_uniforms.data(), GL_DYNAMIC_DRAW);
-						glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, uniform_buffer);
-
+						world_vertex_buffer.bind(GL_DYNAMIC_DRAW);
+						world_index_buffer.bind(GL_DYNAMIC_DRAW);
+						world_normal_buffer.bind(GL_DYNAMIC_DRAW);
 
 						glFrontFace(GL_CCW);
 						glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(cube_indices.size()), GL_UNSIGNED_BYTE, nullptr);
@@ -760,8 +892,7 @@ int main(int argc, char** argv)
 		sky_program.use();
 		sky_program.upload_matrix(sky_imvp, "sky_imvp");
 
-		sky_vertex_buffer.static_bind();
-
+		sky_vertex_buffer.bind();
 
 		glFrontFace(GL_CW);
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(skybox.size()));
