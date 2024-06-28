@@ -8,6 +8,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <algorithm>
 
 #include <array>
 #include <cstdlib>
@@ -427,6 +428,7 @@ int main(int argc, char** argv)
 	{
 		glm::vec4 pos;
 		glm::vec3 col;
+		std::uint8_t normal;
 	};
 
 	static std::vector<glm::vec4> verts
@@ -482,17 +484,24 @@ int main(int argc, char** argv)
 		{ -1.0f, -1.0f, -1.0f,    1.0f }, // 7 far bottom left
 	};
 
-	static const std::vector<GLubyte> close_face{ 0, 2, 6,  6, 4, 0 },
-									    top_face{ 3, 2, 0,  0, 1, 3 },
-									   left_face{ 3, 7, 6,  6, 2, 3 },
-									  right_face{ 0, 4, 5,  5, 1, 0 },
-									    far_face{ 1, 5, 7,  7, 3, 1 },
-									 bottom_face{ 6, 7, 5,  5, 4, 6 };
+	static std::vector<GLubyte> close_face{ 0, 2, 6,  6, 4, 0 }, // normal 0
+							      top_face{ 3, 2, 0,  0, 1, 3 }, // normal 1
+							     left_face{ 3, 7, 6,  6, 2, 3 }, // normal 2
+							    right_face{ 0, 4, 5,  5, 1, 0 }, // normal 3
+							      far_face{ 1, 5, 7,  7, 3, 1 }, // normal 4
+							   bottom_face{ 6, 7, 5,  5, 4, 6 }; // normal 5
 
+
+	//std::reverse(top_face.begin(), top_face.end());
+	//std::reverse(left_face.begin(), left_face.end());
+	//std::reverse(right_face.begin(), right_face.end());
 
 	static std::vector<GLubyte> cube_indices(6 * 6);
 
 
+	//std::reverse(far_face.begin(), far_face.end()); okay
+	//std::reverse(close_face.begin(), close_face.end()); okay
+	//std::reverse(bottom_face.begin(), bottom_face.end()); okay
 
 
 	
@@ -503,6 +512,7 @@ int main(int argc, char** argv)
 	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices };
 	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(vertex, pos));
 	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(vertex, col));
+	world_vertex_buffer.add_attribute(1, GL_UNSIGNED_BYTE, stride, offsetof(vertex, normal));
 	
 	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, cube_indices };
 
@@ -539,7 +549,7 @@ int main(int argc, char** argv)
 
 	auto last_time = 0.0;
 
-	camera camera{ { 0.0f, 2.0f, 6.0f }, glm::radians(-90.0f), glm::radians(-10.0f), window, 0.002f};
+	camera camera{ { 16.0f, 16.0f, 40.0f }, glm::radians(0.0f), glm::radians(0.0f), window, 0.002f};
 
 	while (window.running())
 	{
@@ -576,11 +586,16 @@ int main(int argc, char** argv)
 
 		const auto pv = p * v;
 
-		glClear(GL_DEPTH_BUFFER_BIT);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+
+		
+
 
 
 		world_program.use();
-		glFrontFace(GL_CCW);
+		world_program.upload_matrix(glm::inverse(pv), "world_imvp");
 
 		for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
 		{
@@ -687,12 +702,14 @@ int main(int argc, char** argv)
 					{
 						world_vertex_buffer.static_bind();
 						world_index_buffer.static_bind();
+
 						glFrontFace(GL_CCW);
-						glDrawElements(GL_TRIANGLES, cube_indices.size(), GL_UNSIGNED_BYTE, nullptr);
+						glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(cube_indices.size()), GL_UNSIGNED_BYTE, nullptr);
 					}
 				}
 			}
 		}
+
 
 		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 1000.0f });
 		const auto sky_mvp = pv * sky_m;
@@ -701,15 +718,16 @@ int main(int argc, char** argv)
 		{
 			skybox[i] = sky_mvp * verts[i];
 		}
-		
+
 		sky_program.use();
 		sky_program.upload_matrix(sky_imvp, "sky_imvp");
-		
+
 		sky_vertex_buffer.static_bind();
 
-		
+
 		glFrontFace(GL_CW);
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(skybox.size()));
+
 
 		glfwSwapBuffers(window.handle());
 		glfwPollEvents();
