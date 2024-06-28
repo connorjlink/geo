@@ -297,7 +297,7 @@ private:
 
 	void integrate(float delta_time)
 	{
-		_pos += _vel * delta_time;
+		_pos += 4.0f * _vel * delta_time;
 		_vel += _acc * delta_time;
 		_acc = -_vel;
 
@@ -403,6 +403,7 @@ int main(int argc, char** argv)
 			{
 				for (auto k = 0; k < 16; k++)
 				{
+					// TODO: chunk rendering here
 				}
 			}
 		}
@@ -428,7 +429,6 @@ int main(int argc, char** argv)
 	{
 		glm::vec4 pos;
 		glm::vec3 col;
-		std::uint8_t normal;
 	};
 
 	static std::vector<glm::vec4> verts
@@ -491,6 +491,16 @@ int main(int argc, char** argv)
 							      far_face{ 1, 5, 7,  7, 3, 1 }, // normal 4
 							   bottom_face{ 6, 7, 5,  5, 4, 6 }; // normal 5
 
+	enum
+	{
+		CLOSE_FACE = 0,
+		TOP_FACE,
+		LEFT_FACE,
+		RIGHT_FACE,
+		FAR_FACE,
+		BOTTOM_FACE,
+	};
+
 
 	//std::reverse(top_face.begin(), top_face.end());
 	//std::reverse(left_face.begin(), left_face.end());
@@ -506,14 +516,23 @@ int main(int argc, char** argv)
 
 	
 	std::vector<vertex> world_vertices(cube_vertices.size());
+
+	std::vector<unsigned int> world_uniforms(1024);
 	
 	static constexpr auto stride = sizeof(vertex);
 
 	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices };
 	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(vertex, pos));
 	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(vertex, col));
-	world_vertex_buffer.add_attribute(1, GL_UNSIGNED_BYTE, stride, offsetof(vertex, normal));
+	//world_vertex_buffer.add_attribute(1, GL_UNSIGNED_BYTE, stride, offsetof(vertex, normal));
 	
+	//buffer world_uniform_buffer{ GL_UNIFORM_BUFFER, world_uniforms };
+	GLuint uniform_buffer;
+	glGenBuffers(1, &uniform_buffer);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniform_buffer);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(decltype(world_uniforms)::value_type) * world_uniforms.size(), world_uniforms.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, uniform_buffer);
+
 	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, cube_indices };
 
 
@@ -613,18 +632,21 @@ int main(int argc, char** argv)
 					}
 
 					cube_indices = {};
+					world_uniforms = {};
 
 					if (y + 1 < subchunk::CHUNK_LENGTH)
 					{
 						if (s->index(x, y + 1, z) == nullptr)
 						{
 							cube_indices.append_range(top_face);
+							world_uniforms.emplace_back(TOP_FACE);
 						}
 					}
 
 					else if (y == subchunk::CHUNK_LENGTH - 1)
 					{
 						cube_indices.append_range(top_face);
+						world_uniforms.emplace_back(TOP_FACE);
 					}
 
 
@@ -633,12 +655,14 @@ int main(int argc, char** argv)
 						if (s->index(x, y - 1, z) == nullptr)
 						{
 							cube_indices.append_range(bottom_face);
+							world_uniforms.emplace_back(BOTTOM_FACE);
 						}
 					}
 
 					else if (y == 0)
 					{
 						cube_indices.append_range(bottom_face);
+						world_uniforms.emplace_back(BOTTOM_FACE);
 					}
 
 
@@ -647,12 +671,14 @@ int main(int argc, char** argv)
 						if (s->index(x + 1, y, z) == nullptr)
 						{
 							cube_indices.append_range(right_face);
+							world_uniforms.emplace_back(RIGHT_FACE);
 						}
 					}
 
 					else if (x == subchunk::CHUNK_LENGTH - 1)
 					{
 						cube_indices.append_range(right_face);
+						world_uniforms.emplace_back(RIGHT_FACE);
 					}
 
 
@@ -661,12 +687,14 @@ int main(int argc, char** argv)
 						if (s->index(x - 1, y, z) == nullptr)
 						{
 							cube_indices.append_range(left_face);
+							world_uniforms.emplace_back(LEFT_FACE);
 						}
 					}
 
 					else if (x == 0)
 					{
 						cube_indices.append_range(left_face);
+						world_uniforms.emplace_back(LEFT_FACE);
 					}
 
 
@@ -675,12 +703,14 @@ int main(int argc, char** argv)
 						if (s->index(x, y, z + 1) == nullptr)
 						{
 							cube_indices.append_range(close_face);
+							world_uniforms.emplace_back(CLOSE_FACE);
 						}
 					}
 
 					else if (z == subchunk::CHUNK_LENGTH - 1)
 					{
 						cube_indices.append_range(close_face);
+						world_uniforms.emplace_back(CLOSE_FACE);
 					}
 
 
@@ -689,19 +719,27 @@ int main(int argc, char** argv)
 						if (s->index(x, y, z - 1) == nullptr)
 						{
 							cube_indices.append_range(far_face);
+							world_uniforms.emplace_back(FAR_FACE);
+							world_uniforms.emplace_back(FAR_FACE);
 						}
 					}
 
 					else if (z == 0)
 					{
 						cube_indices.append_range(far_face);
+						world_uniforms.emplace_back(FAR_FACE);
 					}
-
 					
+
 					if (cube_indices.size() != 0)
 					{
 						world_vertex_buffer.static_bind();
 						world_index_buffer.static_bind();
+						//world_uniform_buffer.static_bind();
+						glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniform_buffer);
+						glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(vertex)* world_uniforms.size(), world_uniforms.data(), GL_DYNAMIC_DRAW);
+						glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, uniform_buffer);
+
 
 						glFrontFace(GL_CCW);
 						glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(cube_indices.size()), GL_UNSIGNED_BYTE, nullptr);
