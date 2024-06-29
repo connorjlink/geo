@@ -367,7 +367,7 @@ class block
 public:
 	glm::vec3 _color;
 	std::vector<vertex> _vertices;
-	std::vector<GLubyte> _indices;
+	std::vector<GLuint> _indices;
 	std::vector<GLuint> _normals;
 
 public:
@@ -486,12 +486,12 @@ int main(int argc, char** argv)
 		{ -1.0f, -1.0f, -1.0f,    1.0f }, // 7 far bottom left
 	};
 
-	static std::vector<GLubyte> close_face{ 0, 2, 6,  6, 4, 0 }, // normal 0
-							      top_face{ 3, 2, 0,  0, 1, 3 }, // normal 1
-							     left_face{ 3, 7, 6,  6, 2, 3 }, // normal 2
-							    right_face{ 0, 4, 5,  5, 1, 0 }, // normal 3
-							      far_face{ 1, 5, 7,  7, 3, 1 }, // normal 4
-							   bottom_face{ 6, 7, 5,  5, 4, 6 }; // normal 5
+	static std::vector<GLuint> close_face{ 0, 2, 6,  6, 4, 0 }, // normal 0
+							     top_face{ 3, 2, 0,  0, 1, 3 }, // normal 1
+							    left_face{ 3, 7, 6,  6, 2, 3 }, // normal 2
+							   right_face{ 0, 4, 5,  5, 1, 0 }, // normal 3
+							     far_face{ 1, 5, 7,  7, 3, 1 }, // normal 4
+							  bottom_face{ 6, 7, 5,  5, 4, 6 }; // normal 5
 
 	enum
 	{
@@ -508,7 +508,7 @@ int main(int argc, char** argv)
 	//std::reverse(left_face.begin(), left_face.end());
 	//std::reverse(right_face.begin(), right_face.end());
 
-	static std::vector<GLubyte> cube_indices(6 * 6);
+	//static std::vector<GLubyte> cube_indices(6 * 6);
 
 
 	//std::reverse(far_face.begin(), far_face.end()); okay
@@ -529,6 +529,7 @@ int main(int argc, char** argv)
 		}
 	}
 
+	auto stride_accumulator = 0;
 
 	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
 	{
@@ -541,12 +542,10 @@ int main(int argc, char** argv)
 				for (auto i = 0; i < cube_vertices.size(); i++)
 				{
 					const auto m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
-					//const auto mvp = pv * m;
 
 					vertex v{};
 
 					v.pos = m * cube_vertices[i];
-					//world_vertices[i].pos = mvp * cube_vertices[i];
 
 					v.col = glm::vec3
 					{
@@ -653,21 +652,60 @@ int main(int argc, char** argv)
 					b->_normals.emplace_back(FAR_FACE);
 				}
 
-				//std::cout << std::format("{} {} {}\n", b->_vertices.size(), b->_indices.size(), b->_normals.size());
+
+				for (auto& i : b->_indices)
+				{
+					i += stride_accumulator;
+				}
+
+				stride_accumulator += b->_vertices.size();
 			}
 		}
 	}
 
+	std::vector<vertex> world_vertices;
+	std::vector<GLuint> world_indices;
+	std::vector<GLuint> world_normals;
 
+	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+	{
+		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
+		{
+			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
+			{
+				auto b = s->index(x, y, z);
+
+				if (b != nullptr)
+				{
+					for (auto& v : b->_vertices)
+					{
+						world_vertices.emplace_back(v);
+					}
+
+					for (auto& i : b->_indices)
+					{
+						world_indices.emplace_back(i);
+					}
+
+					for (auto& n : b->_normals)
+					{
+						world_normals.emplace_back(n);
+					}
+				}
+			}
+		}
+
+	}
+
+	std::vector<vertex> world_vertices_transform = world_vertices;
 	
-	std::vector<vertex> world_vertices(cube_vertices.size());
 
-	std::vector<GLuint> world_normals(6);
+	//std::vector<GLuint> world_normals(6);
 
 	
 	static constexpr auto stride = sizeof(vertex);
 
-	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices };
+	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices_transform };
 	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(vertex, pos));
 	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(vertex, col));
 	
@@ -681,7 +719,7 @@ int main(int argc, char** argv)
 	//glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(decltype(world_normals)::value_type)* world_normals.size(), world_normals.data(), GL_DYNAMIC_DRAW);
 	//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, normal_buffer);
 
-	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, cube_indices };
+	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, world_indices };
 
 
 	std::vector<glm::vec4> skybox(verts.size());
@@ -719,6 +757,7 @@ int main(int argc, char** argv)
 
 	camera camera{ { 16.0f, 16.0f, 40.0f }, glm::radians(0.0f), glm::radians(0.0f), window, 0.002f};
 
+
 	while (window.running())
 	{
 		const auto current_time = glfwGetTime();
@@ -755,53 +794,28 @@ int main(int argc, char** argv)
 
 		camera.update(delta_time);
 
-		
-
 		const auto v = glm::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
-
 		const auto pv = p * v;
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-
-
-		
-
+		glClear(GL_DEPTH_BUFFER_BIT);
 
 
 		world_program.use();
 		world_program.upload_matrix(glm::inverse(pv), "world_imvp");
 
-		for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+
+		for (auto i = 0; i < world_vertices.size(); i++)
 		{
-			for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
-			{
-				for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
-				{
-					auto b = s->index(x, y, z);
-					
-					if (b && b->_indices.size() != 0)
-					{
-						world_vertices = b->_vertices;
-
-						for (auto& vertex : world_vertices)
-						{
-							vertex.pos = pv * vertex.pos;
-						}
-
-						cube_indices = b->_indices;
-						world_normals = b->_normals;
-
-						world_vertex_buffer.bind(GL_DYNAMIC_DRAW);
-						world_index_buffer.bind(GL_DYNAMIC_DRAW);
-						world_normal_buffer.bind(GL_DYNAMIC_DRAW);
-
-						glFrontFace(GL_CCW);
-						glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(cube_indices.size()), GL_UNSIGNED_BYTE, nullptr);
-					}
-				}
-			}
+			world_vertices_transform[i].pos = pv * world_vertices[i].pos;
 		}
+
+		world_vertex_buffer.bind(GL_DYNAMIC_DRAW);
+		world_index_buffer.bind();
+		world_normal_buffer.bind();
+
+		glFrontFace(GL_CCW);
+		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(world_indices.size()), GL_UNSIGNED_INT, nullptr);
+
 
 
 		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 1000.0f });

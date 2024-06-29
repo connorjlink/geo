@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 
 const vec3 top_color = vec3(0.016, 0.529, 0.886);
 const vec3 bottom_color = vec3(0.007, 0.288, 0.692);
