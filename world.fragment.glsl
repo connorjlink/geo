@@ -8,8 +8,6 @@ layout (std430, binding = 2) buffer Buffer
 	uint normals[];
 };
 
-//const vec3 col = vec3(1.0, 0.0, 0.0);
-//const vec3 normal = vec3(0.0, 1.0, 0.0);
 
 out vec4 frag_color;
 

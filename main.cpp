@@ -524,24 +524,38 @@ int main(int argc, char** argv)
 		{
 			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
 			{
-				auto b = s->index(x, y, z);
+				s->index(x, y, z) = new block{ glm::vec3{ x / 16.0f, y / 16.0f, z / 16.0f } };
+			}
+		}
+	}
 
-				b = new block{ glm::vec3{ x / 16.0f, y / 16.0f, z / 16.0f } };
+
+	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+	{
+		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
+		{
+			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
+			{
+				auto b = s->index(x, y, z);
 
 				for (auto i = 0; i < cube_vertices.size(); i++)
 				{
 					const auto m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
 					//const auto mvp = pv * m;
 
-					b->_vertices[i].pos = m * cube_vertices[i];
+					vertex v{};
+
+					v.pos = m * cube_vertices[i];
 					//world_vertices[i].pos = mvp * cube_vertices[i];
 
-					b->_vertices[i].col = glm::vec3
+					v.col = glm::vec3
 					{
 						(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / 16.0f,
 						(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / 16.0f,
 						(z + ((cube_vertices[i].z + 1.0f) / 2.0f)) / 16.0f,
 					};
+
+					b->_vertices.emplace_back(v);
 				}
 
 				if (y + 1 < subchunk::CHUNK_LENGTH)
@@ -638,6 +652,8 @@ int main(int argc, char** argv)
 					b->_indices.append_range(far_face);
 					b->_normals.emplace_back(FAR_FACE);
 				}
+
+				//std::cout << std::format("{} {} {}\n", b->_vertices.size(), b->_indices.size(), b->_normals.size());
 			}
 		}
 	}
@@ -699,6 +715,7 @@ int main(int argc, char** argv)
 
 
 	auto last_time = 0.0;
+	auto last_update = 0.0;
 
 	camera camera{ { 16.0f, 16.0f, 40.0f }, glm::radians(0.0f), glm::radians(0.0f), window, 0.002f};
 
@@ -707,6 +724,13 @@ int main(int argc, char** argv)
 		const auto current_time = glfwGetTime();
 		const auto delta_time = static_cast<float>(current_time - last_time);
 		last_time = current_time;
+
+		if (current_time - last_update > 1.0)
+		{
+   			glfwSetWindowTitle(window.handle(), std::format("geo - {} FPS", static_cast<int>(1.0 / delta_time)).c_str());
+			last_update = current_time;
+		}
+
 
 		window.key_action(GLFW_KEY_W, [&]() { camera.vel() += camera.forward() * (CAMERA_SPEED * delta_time); });
 		window.key_action(GLFW_KEY_S, [&]() { camera.vel() -= camera.forward() * (CAMERA_SPEED * delta_time); });
@@ -754,121 +778,20 @@ int main(int argc, char** argv)
 			{
 				for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
 				{
-					for (auto i = 0; i < cube_vertices.size(); i++)
-					{
-						m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
-						const auto mvp = pv * m;
-
-						world_vertices[i].pos = mvp * cube_vertices[i];
-						world_vertices[i].col = glm::vec3
-						{ 
-							(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / 16.0f, 
-							(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / 16.0f, 
-							(z + ((cube_vertices[i].z + 1.0f) / 2.0f)) / 16.0f,
-						};
-					}
-
-					cube_indices = {};
-					world_normals = {};
-
-					if (y + 1 < subchunk::CHUNK_LENGTH)
-					{
-						if (s->index(x, y + 1, z) == nullptr)
-						{
-							cube_indices.append_range(top_face);
-							world_normals.emplace_back(TOP_FACE);
-						}
-					}
-
-					else if (y == subchunk::CHUNK_LENGTH - 1)
-					{
-						cube_indices.append_range(top_face);
-						world_normals.emplace_back(TOP_FACE);
-					}
-
-
-					if (y - 1 > 0)
-					{
-						if (s->index(x, y - 1, z) == nullptr)
-						{
-							cube_indices.append_range(bottom_face);
-							world_normals.emplace_back(BOTTOM_FACE);
-						}
-					}
-
-					else if (y == 0)
-					{
-						cube_indices.append_range(bottom_face);
-						world_normals.emplace_back(BOTTOM_FACE);
-					}
-
-
-					if (x + 1 < subchunk::CHUNK_LENGTH)
-					{
-						if (s->index(x + 1, y, z) == nullptr)
-						{
-							cube_indices.append_range(right_face);
-							world_normals.emplace_back(RIGHT_FACE);
-						}
-					}
-
-					else if (x == subchunk::CHUNK_LENGTH - 1)
-					{
-						cube_indices.append_range(right_face);
-						world_normals.emplace_back(RIGHT_FACE);
-					}
-
-
-					if (x - 1 > 0)
-					{
-						if (s->index(x - 1, y, z) == nullptr)
-						{
-							cube_indices.append_range(left_face);
-							world_normals.emplace_back(LEFT_FACE);
-						}
-					}
-
-					else if (x == 0)
-					{
-						cube_indices.append_range(left_face);
-						world_normals.emplace_back(LEFT_FACE);
-					}
-
-
-					if (z + 1 < subchunk::CHUNK_LENGTH)
-					{
-						if (s->index(x, y, z + 1) == nullptr)
-						{
-							cube_indices.append_range(close_face);
-							world_normals.emplace_back(CLOSE_FACE);
-						}
-					}
-
-					else if (z == subchunk::CHUNK_LENGTH - 1)
-					{
-						cube_indices.append_range(close_face);
-						world_normals.emplace_back(CLOSE_FACE);
-					}
-
-
-					if (z - 1 > 0)
-					{
-						if (s->index(x, y, z - 1) == nullptr)
-						{
-							cube_indices.append_range(far_face);
-							world_normals.emplace_back(FAR_FACE);
-						}
-					}
-
-					else if (z == 0)
-					{
-						cube_indices.append_range(far_face);
-						world_normals.emplace_back(FAR_FACE);
-					}
+					auto b = s->index(x, y, z);
 					
-
-					if (cube_indices.size() != 0)
+					if (b && b->_indices.size() != 0)
 					{
+						world_vertices = b->_vertices;
+
+						for (auto& vertex : world_vertices)
+						{
+							vertex.pos = pv * vertex.pos;
+						}
+
+						cube_indices = b->_indices;
+						world_normals = b->_normals;
+
 						world_vertex_buffer.bind(GL_DYNAMIC_DRAW);
 						world_index_buffer.bind(GL_DYNAMIC_DRAW);
 						world_normal_buffer.bind(GL_DYNAMIC_DRAW);
