@@ -473,6 +473,11 @@ int main(int argc, char** argv)
 		{  1.0f, -1.0f,  1.0f, 1.0f, },
 	};
 
+	for (auto i = 0; i < verts.size(); i += 3)
+	{
+		std::swap(verts[i], verts[i + 2]);
+	}
+
 	static std::vector<glm::vec4> cube_vertices
 	{
 		{  1.0f,  1.0f,  1.0f,    1.0f }, // 0 close top right
@@ -738,7 +743,7 @@ int main(int argc, char** argv)
 	//const auto r = glm::rotate(glm::identity<glm::mat4>(), rotation, glm::vec3{ 0.0f, 0.0f, 1.0f });
 	//const auto s = glm::scale(glm::vec3{ 5.0, 0.5f, 5.0f });
 	//const auto m = t * r * s;
-	auto m = glm::mat4(1.0f);
+	auto m = glm::mat4(1.0f), sky_m = glm::mat4(1.0f), sky_mvp = glm::mat4(1.0f), sky_imvp = glm::mat4(1.0f);
 
 
 	auto compute_p = [&](float fov)
@@ -757,6 +762,8 @@ int main(int argc, char** argv)
 
 	camera camera{ { 16.0f, 16.0f, 40.0f }, glm::radians(0.0f), glm::radians(0.0f), window, 0.002f};
 
+	// let's make sure our timer stuff fires initially
+	auto timer = 1.1; 
 
 	while (window.running())
 	{
@@ -764,7 +771,7 @@ int main(int argc, char** argv)
 		const auto delta_time = static_cast<float>(current_time - last_time);
 		last_time = current_time;
 
-		if (current_time - last_update > 1.0)
+		if (timer > 1.0)
 		{
    			glfwSetWindowTitle(window.handle(), std::format("geo - {} FPS", static_cast<int>(1.0 / delta_time)).c_str());
 			last_update = current_time;
@@ -801,8 +808,6 @@ int main(int argc, char** argv)
 
 
 		world_program.use();
-		world_program.upload_matrix(glm::inverse(pv), "world_imvp");
-
 
 		for (auto i = 0; i < world_vertices.size(); i++)
 		{
@@ -813,17 +818,19 @@ int main(int argc, char** argv)
 		world_index_buffer.bind();
 		world_normal_buffer.bind();
 
-		glFrontFace(GL_CCW);
 		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(world_indices.size()), GL_UNSIGNED_INT, nullptr);
 
 
+		sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 1000.0f });
+		sky_mvp = pv * sky_m;
+		sky_imvp = glm::inverse(sky_mvp);
 
-		const auto sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 1000.0f });
-		const auto sky_mvp = pv * sky_m;
-		const auto sky_imvp = glm::inverse(sky_mvp); // inverse for skybox
-		for (auto i = 0; i < verts.size(); i++)
+		if (timer > 1.0)
 		{
-			skybox[i] = sky_mvp * verts[i];
+			for (auto i = 0; i < verts.size(); i++)
+			{
+				skybox[i] = sky_mvp * verts[i];
+			}
 		}
 
 		sky_program.use();
@@ -831,11 +838,12 @@ int main(int argc, char** argv)
 
 		sky_vertex_buffer.bind();
 
-		glFrontFace(GL_CW);
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(skybox.size()));
-
 
 		glfwSwapBuffers(window.handle());
 		glfwPollEvents();
+
+		// TODO: resolve the timing stuff so this can go at the top of the loop with the rest of it
+		timer = current_time - last_update;
 	}
 }
