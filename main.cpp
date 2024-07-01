@@ -765,6 +765,10 @@ int main(int argc, char** argv)
 	// let's make sure our timer stuff fires initially
 	auto timer = 1.1; 
 
+	
+	world_index_buffer.bind();
+	world_normal_buffer.bind();
+
 	while (window.running())
 	{
 		const auto current_time = glfwGetTime();
@@ -792,7 +796,7 @@ int main(int argc, char** argv)
 			fov = 60.0f;
 			p = compute_p(fov);
 		}
-
+		
 		else
 		{
 			fov = 90.0f;
@@ -808,15 +812,12 @@ int main(int argc, char** argv)
 
 
 		world_program.use();
+		world_vertex_buffer.bind(GL_DYNAMIC_DRAW);
 
 		for (auto i = 0; i < world_vertices.size(); i++)
 		{
 			world_vertices_transform[i].pos = pv * world_vertices[i].pos;
 		}
-
-		world_vertex_buffer.bind(GL_DYNAMIC_DRAW);
-		world_index_buffer.bind();
-		world_normal_buffer.bind();
 
 		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(world_indices.size()), GL_UNSIGNED_INT, nullptr);
 
