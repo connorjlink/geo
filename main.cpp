@@ -719,14 +719,7 @@ int main(int argc, char** argv)
 	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(vertex, col));
 	
 	buffer world_normal_buffer{ GL_SHADER_STORAGE_BUFFER, world_normals };
-	//world_normal_buffer.bind();
 	world_normal_buffer.base();
-	
-	//GLuint normal_buffer;
-	//glGenBuffers(1, &normal_buffer);
-	//glBindBuffer(GL_SHADER_STORAGE_BUFFER, normal_buffer);
-	//glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(decltype(world_normals)::value_type)* world_normals.size(), world_normals.data(), GL_DYNAMIC_DRAW);
-	//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, normal_buffer);
 
 	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, world_indices };
 
