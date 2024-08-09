@@ -383,10 +383,12 @@ public:
 class subchunk
 {
 public:
-	std::array<block*, 16 * 16 * 16> _blocks;
+	static constexpr auto CHUNK_LENGTH = 32;
 
 public:
-	static constexpr auto CHUNK_LENGTH = 16;
+	std::array<block*, CHUNK_LENGTH * CHUNK_LENGTH * CHUNK_LENGTH> _blocks;
+
+public:
 	block*& index(int x, int y, int z)
 	{
 		return _blocks[x + (CHUNK_LENGTH * (y + (CHUNK_LENGTH * z)))];
@@ -508,19 +510,6 @@ int main(int argc, char** argv)
 		BOTTOM_FACE,
 	};
 
-
-	//std::reverse(top_face.begin(), top_face.end());
-	//std::reverse(left_face.begin(), left_face.end());
-	//std::reverse(right_face.begin(), right_face.end());
-
-	//static std::vector<GLubyte> cube_indices(6 * 6);
-
-
-	//std::reverse(far_face.begin(), far_face.end()); okay
-	//std::reverse(close_face.begin(), close_face.end()); okay
-	//std::reverse(bottom_face.begin(), bottom_face.end()); okay
-
-
 	auto s = new subchunk{};
 
 	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
@@ -529,7 +518,19 @@ int main(int argc, char** argv)
 		{
 			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
 			{
-				s->index(x, y, z) = new block{ glm::vec3{ x / 16.0f, y / 16.0f, z / 16.0f } };
+				auto xyz = glm::vec3{ x, y, z };
+
+				auto center = glm::vec3{ subchunk::CHUNK_LENGTH / 2 };
+
+				if (glm::distance(xyz, center) < subchunk::CHUNK_LENGTH / 2)
+				{
+					s->index(x, y, z) = new block{ glm::vec3
+					{ 
+						x / static_cast<float>(subchunk::CHUNK_LENGTH),
+						y / static_cast<float>(subchunk::CHUNK_LENGTH), 
+						z / static_cast<float>(subchunk::CHUNK_LENGTH) 
+					} };
+				}
 			}
 		}
 	}
@@ -544,126 +545,129 @@ int main(int argc, char** argv)
 			{
 				auto b = s->index(x, y, z);
 
-				for (auto i = 0; i < cube_vertices.size(); i++)
+				if (b != nullptr)
 				{
-					const auto m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
-
-					vertex v{};
-
-					v.pos = m * cube_vertices[i];
-
-					v.col = glm::vec3
+					for (auto i = 0; i < cube_vertices.size(); i++)
 					{
-						(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / 16.0f,
-						(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / 16.0f,
-						(z + ((cube_vertices[i].z + 1.0f) / 2.0f)) / 16.0f,
-					};
+						const auto m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
 
-					b->_vertices.emplace_back(v);
-				}
+						vertex v{};
 
-				if (y + 1 < subchunk::CHUNK_LENGTH)
-				{
-					if (s->index(x, y + 1, z) == nullptr)
+						v.pos = m * cube_vertices[i];
+
+						v.col = glm::vec3
+						{
+							(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
+							(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
+							(z + ((cube_vertices[i].z + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
+						};
+
+						b->_vertices.emplace_back(v);
+					}
+
+					if (y + 1 < subchunk::CHUNK_LENGTH)
+					{
+						if (s->index(x, y + 1, z) == nullptr)
+						{
+							b->_indices.append_range(top_face);
+							b->_normals.emplace_back(TOP_FACE);
+						}
+					}
+
+					else if (y == subchunk::CHUNK_LENGTH - 1)
 					{
 						b->_indices.append_range(top_face);
 						b->_normals.emplace_back(TOP_FACE);
 					}
-				}
-
-				else if (y == subchunk::CHUNK_LENGTH - 1)
-				{
-					b->_indices.append_range(top_face);
-					b->_normals.emplace_back(TOP_FACE);
-				}
 
 
-				if (y - 1 > 0)
-				{
-					if (s->index(x, y - 1, z) == nullptr)
+					if (y - 1 > 0)
+					{
+						if (s->index(x, y - 1, z) == nullptr)
+						{
+							b->_indices.append_range(bottom_face);
+							b->_normals.emplace_back(BOTTOM_FACE);
+						}
+					}
+
+					else if (y == 0)
 					{
 						b->_indices.append_range(bottom_face);
 						b->_normals.emplace_back(BOTTOM_FACE);
 					}
-				}
-
-				else if (y == 0)
-				{
-					b->_indices.append_range(bottom_face);
-					b->_normals.emplace_back(BOTTOM_FACE);
-				}
 
 
-				if (x + 1 < subchunk::CHUNK_LENGTH)
-				{
-					if (s->index(x + 1, y, z) == nullptr)
+					if (x + 1 < subchunk::CHUNK_LENGTH)
+					{
+						if (s->index(x + 1, y, z) == nullptr)
+						{
+							b->_indices.append_range(right_face);
+							b->_normals.emplace_back(RIGHT_FACE);
+						}
+					}
+
+					else if (x == subchunk::CHUNK_LENGTH - 1)
 					{
 						b->_indices.append_range(right_face);
 						b->_normals.emplace_back(RIGHT_FACE);
 					}
-				}
-
-				else if (x == subchunk::CHUNK_LENGTH - 1)
-				{
-					b->_indices.append_range(right_face);
-					b->_normals.emplace_back(RIGHT_FACE);
-				}
 
 
-				if (x - 1 > 0)
-				{
-					if (s->index(x - 1, y, z) == nullptr)
+					if (x - 1 > 0)
+					{
+						if (s->index(x - 1, y, z) == nullptr)
+						{
+							b->_indices.append_range(left_face);
+							b->_normals.emplace_back(LEFT_FACE);
+						}
+					}
+
+					else if (x == 0)
 					{
 						b->_indices.append_range(left_face);
 						b->_normals.emplace_back(LEFT_FACE);
 					}
-				}
-
-				else if (x == 0)
-				{
-					b->_indices.append_range(left_face);
-					b->_normals.emplace_back(LEFT_FACE);
-				}
 
 
-				if (z + 1 < subchunk::CHUNK_LENGTH)
-				{
-					if (s->index(x, y, z + 1) == nullptr)
+					if (z + 1 < subchunk::CHUNK_LENGTH)
+					{
+						if (s->index(x, y, z + 1) == nullptr)
+						{
+							b->_indices.append_range(close_face);
+							b->_normals.emplace_back(CLOSE_FACE);
+						}
+					}
+
+					else if (z == subchunk::CHUNK_LENGTH - 1)
 					{
 						b->_indices.append_range(close_face);
 						b->_normals.emplace_back(CLOSE_FACE);
 					}
-				}
-
-				else if (z == subchunk::CHUNK_LENGTH - 1)
-				{
-					b->_indices.append_range(close_face);
-					b->_normals.emplace_back(CLOSE_FACE);
-				}
 
 
-				if (z - 1 > 0)
-				{
-					if (s->index(x, y, z - 1) == nullptr)
+					if (z - 1 > 0)
+					{
+						if (s->index(x, y, z - 1) == nullptr)
+						{
+							b->_indices.append_range(far_face);
+							b->_normals.emplace_back(FAR_FACE);
+						}
+					}
+
+					else if (z == 0)
 					{
 						b->_indices.append_range(far_face);
 						b->_normals.emplace_back(FAR_FACE);
 					}
+
+
+					for (auto& i : b->_indices)
+					{
+						i += stride_accumulator;
+					}
+
+					stride_accumulator += b->_vertices.size();
 				}
-
-				else if (z == 0)
-				{
-					b->_indices.append_range(far_face);
-					b->_normals.emplace_back(FAR_FACE);
-				}
-
-
-				for (auto& i : b->_indices)
-				{
-					i += stride_accumulator;
-				}
-
-				stride_accumulator += b->_vertices.size();
 			}
 		}
 	}
