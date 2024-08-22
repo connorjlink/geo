@@ -14,10 +14,45 @@
 #include <cstdlib>
 #include <cmath>
 
-#include <Windows.h>
 
+#include <windows.h>
+#include <winerror.h>
+#include <comdef.h>
+
+//#include <gl/gl.h>
 #include "glad.h"
-#include <GLFW/glfw3.h>
+
+#pragma comment(lib, "opengl32.lib")
+#pragma comment(lib, "gdi32.lib")
+
+typedef HGLRC WINAPI wglCreateContextAttribsARB_type(HDC hdc, HGLRC hShareContext,
+	const int* attribList);
+wglCreateContextAttribsARB_type* wglCreateContextAttribsARB;
+
+// See https://www.khronos.org/registry/OpenGL/extensions/ARB/WGL_ARB_create_context.txt for all values
+#define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB             0x2092
+#define WGL_CONTEXT_PROFILE_MASK_ARB              0x9126
+
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
+
+typedef BOOL WINAPI wglChoosePixelFormatARB_type(HDC hdc, const int* piAttribIList,
+	const FLOAT* pfAttribFList, UINT nMaxFormats, int* piFormats, UINT* nNumFormats);
+wglChoosePixelFormatARB_type* wglChoosePixelFormatARB;
+
+// See https://www.khronos.org/registry/OpenGL/extensions/ARB/WGL_ARB_pixel_format.txt for all values
+#define WGL_DRAW_TO_WINDOW_ARB                    0x2001
+#define WGL_ACCELERATION_ARB                      0x2003
+#define WGL_SUPPORT_OPENGL_ARB                    0x2010
+#define WGL_DOUBLE_BUFFER_ARB                     0x2011
+#define WGL_PIXEL_TYPE_ARB                        0x2013
+#define WGL_COLOR_BITS_ARB                        0x2014
+#define WGL_DEPTH_BITS_ARB                        0x2022
+#define WGL_STENCIL_BITS_ARB                      0x2023
+
+#define WGL_FULL_ACCELERATION_ARB                 0x2027
+#define WGL_TYPE_RGBA_ARB                         0x202B
+
 
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_SIMD_AVX2
@@ -184,50 +219,148 @@ public:
 class window
 {
 private:
-	GLFWwindow* _window;
+	HWND _hwnd;
+	HDC _hdc;
+	HGLRC _hrc;
 
 public:
-	decltype(_window)& handle()
+	decltype(_hwnd)& hwnd()
 	{
-		return _window;
+		return _hwnd;
 	}
 
 public:
-	bool running() const
+	static bool key_pressed(int key)
 	{
-		return !glfwWindowShouldClose(_window);
+		// key is down
+		static constexpr auto PRESSED = 0x8000;
+
+		// key was pressed since last call to GetAsyncKeyState()
+		static constexpr auto PRESSED_NEW = 0x1;
+
+		return (GetAsyncKeyState(key) & PRESSED);
 	}
 
 public:
 	void key_action(int key, auto callable)
 	{
-		if (glfwGetKey(_window, key) == GLFW_PRESS)
+		if (key_pressed(key))
 		{
 			callable();
 		}
 	}
 
 public:
-	window(const int width, const int height, std::string_view title)
+	void swap()
 	{
-		if (!glfwInit())
+		SwapBuffers(_hdc);
+	}
+
+private:
+	static HGLRC OpenGLBindContext(HDC hdc)
+	{
+		PIXELFORMATDESCRIPTOR pfd{};
+		pfd.nSize = sizeof(PIXELFORMATDESCRIPTOR);
+		pfd.nVersion = 1;
+		pfd.dwFlags = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW | PFD_DOUBLEBUFFER;
+		pfd.iPixelType = PFD_TYPE_RGBA;
+		pfd.cColorBits = 24;
+		pfd.cDepthBits = 32;
+		pfd.cAlphaBits = 8;
+		pfd.cStencilBits = 8;
+		pfd.iLayerType = PFD_MAIN_PLANE;
+
+		int pixelFormat = ChoosePixelFormat(hdc, &pfd);
+		SetPixelFormat(hdc, pixelFormat, &pfd);
+
+		HGLRC context = wglCreateContext(hdc);
+		wglMakeCurrent(hdc, context);
+		return context;
+	}
+
+
+private:
+	static void* GetAnyGLFuncAddress(const char* name)
+	{
+		void* p = (void*)wglGetProcAddress(name); // load newer functions via wglGetProcAddress
+		if (p == 0 ||
+			(p == (void*)0x1) || (p == (void*)0x2) || (p == (void*)0x3) ||
+			(p == (void*)-1)) // does it return NULL - i.e. is the function not found?
 		{
-			PANIC("Failed to initialize GLFW");
+			// could be an OpenGL 1.1 function
+			HMODULE module = LoadLibraryA("opengl32.dll");
+			p = (void*)GetProcAddress(module, name); // then import directly from GL lib
 		}
 
-		_window = glfwCreateWindow(width, height, title.data(), NULL, NULL);
+		return p;
+	}
 
-		if (_window == NULL)
+public:
+	window(const int width, const int height, std::wstring_view title, WNDPROC proc)
+	{
+		WNDCLASSEX wcex{};
+		wcex.cbSize = sizeof(wcex);
+		wcex.cbClsExtra = NULL;
+		wcex.cbWndExtra = NULL;
+		wcex.hInstance = GetModuleHandle(NULL);
+		// NOTE: to capture double-click events, specify CS_DBLCLKS
+		wcex.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+		wcex.lpfnWndProc = proc;
+		wcex.lpszClassName = title.data();
+		wcex.hCursor = LoadCursor(wcex.hInstance, IDC_ARROW);
+		
+		const auto icon = LoadIcon(wcex.hInstance, IDI_APPLICATION);
+		wcex.hIcon = icon;
+		wcex.hIconSm = icon;
+
+		wcex.hbrBackground = NULL;
+
+		const auto window_class = RegisterClassEx(&wcex);
+		if (!window_class)
 		{
-			PANIC("Failed to create GLFW window");
+			PANIC("Failed to register Win32 window class");
+		}
+		
+
+		constexpr auto style = ((WS_OVERLAPPEDWINDOW | WS_VISIBLE) & ~WS_THICKFRAME) & ~WS_MAXIMIZEBOX;
+
+		_hwnd = CreateWindowEx(NULL, title.data(), title.data(), style, CW_USEDEFAULT, CW_USEDEFAULT, width, height, NULL, NULL, wcex.hInstance, NULL);
+		if (!_hwnd)
+		{
+			PANIC("Failed to create Win32 window");
 		}
 
-		glfwMakeContextCurrent(_window);
+		_hdc = GetDC(_hwnd);
+		_hrc = OpenGLBindContext(_hdc);
 
-		if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0)
+		if (!gladLoadGL())
 		{
-			PANIC("Failed to load GLAD function pointers");
+			PANIC("Failed to initialize GLAD");
 		}
+
+		if (!gladLoadGLLoader((GLADloadproc)GetAnyGLFuncAddress)) {
+			_com_error err{ (HRESULT)GetLastError() };
+			auto text = err.ErrorMessage();
+			MessageBox(nullptr, text, L"Error", MB_OK);
+			return;
+		}
+
+		// Load the wglSwapIntervalEXT function
+		typedef BOOL(APIENTRY* PFNWGLSWAPINTERVALEXTPROC)(int interval);
+		PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = nullptr;
+		wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)GetAnyGLFuncAddress("wglSwapIntervalEXT");
+		if (wglSwapIntervalEXT == nullptr) {
+			MessageBox(nullptr, L"Failed to load wglSwapIntervalEXT", L"Error", MB_OK);
+		}
+		wglSwapIntervalEXT(0);
+		//const auto pointers = gladLoadGLLoader(reinterpret_cast<GLADloadproc>(wglGetProcAddress));
+		//if (!pointers)
+		//{
+		//	_com_error err(GetLastError());
+		//	auto errorMsg = err.ErrorMessage();
+		//	MessageBoxW(_hwnd, errorMsg, L"Failure", MB_OK);
+		//	PANIC("Failed to load GLAD function pointers");
+		//}
 	}
 };
 
@@ -240,14 +373,13 @@ private:
 	float _yaw, _pitch;
 
 private:
-	double _mouse_x, _mouse_y;
-	double _mouse_x_old, _mouse_y_old;
+	POINT _mouse;
+	POINT _mouse_old;
 
 private:
 	const float _sensitivity;
 
 private:
-	GLFWwindow* _window;
 	bool _locked;
 
 private:
@@ -272,19 +404,18 @@ public:
 private:
 	void poll_mouse()
 	{
-		glfwGetCursorPos(_window, &_mouse_x, &_mouse_y);
+		GetCursorPos(&_mouse);
 
 		if (_locked)
 		{
-			_yaw -= static_cast<float>(_mouse_x_old - _mouse_x) * _sensitivity;
-			_pitch -= static_cast<float>(_mouse_y_old - _mouse_y) * _sensitivity;
+			_yaw -= (_mouse_old.x - _mouse.x) * _sensitivity;
+			_pitch -= (_mouse_old.y - _mouse.y) * _sensitivity;
 
 			_yaw = std::fmod(_yaw, glm::two_pi<float>());
 			_pitch = glm::clamp(_pitch, glm::radians(-85.0f), glm::radians(85.0f));
 		}
 
-		_mouse_x_old = _mouse_x;
-		_mouse_y_old = _mouse_y;
+		_mouse_old = _mouse;
 	}
 
 	void update_dir()
@@ -306,6 +437,21 @@ private:
 		if (glm::length(_vel) < 0.01f)
 		{
 			_vel = glm::vec3{ 0.0f };
+		}
+	}
+
+	void try_lock()
+	{
+		if (window::key_pressed(VK_RBUTTON))
+		{
+			//ShowCursor(FALSE);
+			_locked = true;
+		}
+
+		else
+		{
+			///ShowCursor(TRUE);
+			_locked = false;
 		}
 	}
 
@@ -334,24 +480,15 @@ public:
 		poll_mouse();
 		update_dir();
 		integrate(delta_time);
-
-		if (glfwGetMouseButton(_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-		{
-			glfwSetInputMode(_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			_locked = true;
-		}
-
-		else
-		{
-			glfwSetInputMode(_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-			_locked = false;
-		}
+		try_lock();
 	}
 
 public:
-	camera(const glm::vec3 pos, const float yaw, const float pitch, window& window, const float sensitivity)
-		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _window{ window.handle() }, _sensitivity{ sensitivity }
+	camera(const glm::vec3 pos, const float yaw, const float pitch, const float sensitivity)
+		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _sensitivity{ sensitivity }
 	{
+		_acc = glm::vec3{ 0.0f };
+		_vel = glm::vec3{ 0.0f };
 		update_dir();
 	}
 };
@@ -401,13 +538,40 @@ public:
 	std::array<subchunk, 16> _subchunks;
 };
 
-int main(int argc, char** argv)
-{
-	static constexpr auto WIDTH = 1280, HEIGHT = 720;
-	//static constexpr auto WIDTH = 2560, HEIGHT = 1440;
-	static constexpr auto CAMERA_SPEED = 5.0f;
+static constexpr auto WIDTH = 1280, HEIGHT = 720;
+//static constexpr auto WIDTH = 2560, HEIGHT = 1440;
+static constexpr auto CAMERA_SPEED = 5.0f;
 
-	window window{ WIDTH, HEIGHT, "geo" };
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+
+window _window{ WIDTH, HEIGHT, L"geo", &WndProc };
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+	switch (message)
+	{
+	case WM_CLOSE:
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return 0;
+	}
+
+	return DefWindowProc(hwnd, message, wparam, lparam);
+}
+
+int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
+					  _In_opt_ HINSTANCE hprevinstance,
+					  _In_     LPWSTR    lpcmdline,
+					  _In_     INT       ncmdshow)
+{
+	UNREFERENCED_PARAMETER(hprevinstance);
+	UNREFERENCED_PARAMETER(lpcmdline);
+
+	
+
+	ShowWindow(_window.hwnd(), ncmdshow);
+	UpdateWindow(_window.hwnd());
+
 
 	shader_program world_program{ "C:/Users/linkc/Desktop/geo/world" };
 	shader_program sky_program{ "C:/Users/linkc/Desktop/geo/sky" };
@@ -751,44 +915,56 @@ int main(int argc, char** argv)
 	auto fov = 90.0f;
 	auto p = compute_p(fov);
 
-	glfwSwapInterval(0);
+	
 
-
-	auto last_time = 0.0;
-	auto last_update = 0.0;
-
-	camera camera{ { 16.0f, 16.0f, 40.0f }, glm::radians(0.0f), glm::radians(0.0f), window, 0.002f};
+	camera camera{ { 50.0f, 0.0f, 50.0f }, glm::radians(180.0f), glm::radians(0.0f), 0.002f};
 
 	// let's make sure our timer stuff fires initially
-	auto timer = 1.1; 
+	auto timer = 0.0f; 
 
 	
 	world_index_buffer.bind();
 	world_normal_buffer.bind();
 
-	while (window.running())
+	auto last_time = std::chrono::high_resolution_clock::now();
+	auto last_update = last_time;
+
+	while (true)
 	{
-		const auto current_time = glfwGetTime();
-		const auto delta_time = static_cast<float>(current_time - last_time);
+		MSG msg;
+		while (PeekMessage(&msg, NULL, NULL, NULL, PM_REMOVE) == TRUE)
+		{
+			if (msg.message == WM_QUIT) [[unlikely]]
+			{
+				PostQuitMessage(0);
+				return EXIT_SUCCESS;
+			}
+		
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+
+		const auto current_time = std::chrono::high_resolution_clock::now();
+		const auto delta_time = (current_time - last_time).count() / 1e9f;
 		last_time = current_time;
 
 		if (timer > 1.0)
 		{
-   			glfwSetWindowTitle(window.handle(), std::format("geo - {} FPS", static_cast<int>(1.0 / delta_time)).c_str());
+			const auto title = std::format(L"geo - {} FPS", static_cast<int>(1.0f / delta_time));
+			SetWindowText(_window.hwnd(), title.c_str());
 			last_update = current_time;
 		}
 
-
-		window.key_action(GLFW_KEY_W, [&]() { camera.vel() += camera.forward() * (CAMERA_SPEED * delta_time); });
-		window.key_action(GLFW_KEY_S, [&]() { camera.vel() -= camera.forward() * (CAMERA_SPEED * delta_time); });
-
-		window.key_action(GLFW_KEY_D, [&]() { camera.vel() += camera.right() * (CAMERA_SPEED * delta_time); });
-		window.key_action(GLFW_KEY_A, [&]() { camera.vel() -= camera.right() * (CAMERA_SPEED * delta_time); });
-
-		window.key_action(GLFW_KEY_SPACE, [&]() { camera.vel() += camera.up() * (CAMERA_SPEED * delta_time); });
-		window.key_action(GLFW_KEY_LEFT_SHIFT, [&]() { camera.vel() -= camera.up() * (CAMERA_SPEED * delta_time); });
-
-		if (glfwGetMouseButton(window.handle(), GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS)
+		_window.key_action(VkKeyScan('w'), [&]() { camera.vel() += camera.forward() * (CAMERA_SPEED * delta_time); });
+		_window.key_action(VkKeyScan('s'), [&]() { camera.vel() -= camera.forward() * (CAMERA_SPEED * delta_time); });
+		
+		_window.key_action(VkKeyScan('d'), [&]() { camera.vel() += camera.right() * (CAMERA_SPEED * delta_time); });
+		_window.key_action(VkKeyScan('a'), [&]() { camera.vel() -= camera.right() * (CAMERA_SPEED * delta_time); });
+		
+		_window.key_action(VK_SPACE, [&]() { camera.vel() += camera.up() * (CAMERA_SPEED * delta_time); });
+		_window.key_action(VK_LSHIFT, [&]() { camera.vel() -= camera.up() * (CAMERA_SPEED * delta_time); });
+		
+		if (window::key_pressed(VK_MBUTTON))
 		{
 			fov = 60.0f;
 			p = compute_p(fov);
@@ -804,6 +980,7 @@ int main(int argc, char** argv)
 
 		const auto v = glm::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
 		const auto pv = p * v;
+
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
@@ -838,10 +1015,11 @@ int main(int argc, char** argv)
 
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(skybox.size()));
 
-		glfwSwapBuffers(window.handle());
-		glfwPollEvents();
+		//glFinish();
+
+		_window.swap();
 
 		// TODO: resolve the timing stuff so this can go at the top of the loop with the rest of it
-		timer = current_time - last_update;
+		timer = (current_time - last_update).count() / 1e9f;
 	}
 }
