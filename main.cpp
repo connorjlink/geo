@@ -53,17 +53,218 @@ wglChoosePixelFormatARB_type* wglChoosePixelFormatARB;
 #define WGL_FULL_ACCELERATION_ARB                 0x2027
 #define WGL_TYPE_RGBA_ARB                         0x202B
 
-
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#define GLM_FORCE_SIMD_AVX2
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
 #define PANIC(x) std::println(std::cerr, x); std::cin.get(); std::exit(EXIT_FAILURE)
 
-class shader
+#define panic(x) std::print("{} @ {}", x, __FUNCTION__)
+
+namespace geo
+{
+	using platform_type = float;
+
+
+#pragma region Floating Point Manipulation
+	template<typename T = platform_type>
+	consteval T pi()
+	{
+		return T{ 3.14159265358979323846l };
+	}
+
+	template<typename T = platform_type>
+	constexpr T radians(T degrees)
+	{
+		constexpr auto factor = pi() / T{ 180 };
+		return degrees * factor;
+	}
+
+	template<typename T = platform_type>
+	constexpr T degrees(T radians)
+	{
+		constexpr auto factor = T{ 180 } / pi();
+		return radians * factor;
+	}
+#pragma endregion
+
+
+	template<std::size_t M = 4, std::size_t N = 4, typename T = platform_type>
+	class mat
+	{
+	private:
+		std::array<std::array<T, N>, M> _data;
+
+	public:
+		constexpr auto operator[](std::size_t i, std::size_t j)
+		{
+			return _data[i][j];
+		}
+	};
+
+	template<typename T>
+	using basic_mat2 = mat<2, 2, T>;
+	using mat2 = basic_mat2<platform_type>;
+
+	template<typename T>
+	using basic_mat3 = mat<3, 3, T>;
+	using mat3 = basic_mat3<platform_type>;
+
+	template<typename T>
+	using basic_mat4 = mat<4, 4, T>;
+	using mat4 = basic_mat4<platform_type>;
+
+#pragma region Matrix Manipulation
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr mat<M, M, T> identity()
+	{
+		mat<M, M, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			for (auto j = 0; j < M; j++)
+			{
+				out[i, j] = T{ 0 };
+			}
+		}
+
+		for (auto ij = 0; ij < M; ij++)
+		{
+			out[ij, ij] = T{ 1 };
+		}
+
+		return out;
+	}
+#pragma endregion
+	
+
+	template<std::size_t M = 4, typename T = platform_type>
+	class vec
+	{
+	private:
+		std::array<M, T> _data;
+
+	public:
+		auto& operator[](std::size_t i)
+		{
+			return _data[i];
+		}
+	};
+
+	template<typename T>
+	using basic_vec2 = vec<2, T>;
+	using vec2 = basic_vec2<platform_type>;
+
+	template<typename T>
+	using basic_vec3 = vec<3, T>;
+	using vec3 = basic_vec3<platform_type>;
+
+	template<typename T>
+	using basic_vec4 = vec<4, T>;
+	using vec4 = basic_vec4<platform_type>;
+
+
+#pragma region Vector Manipulation
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr vec<M, T> broadcast(T scalar)
+	{
+		vec<M, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			out[i] = scalar;
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr vec<M, T> scale(const vec<M, T>& vector, T scalar)
+	{
+		vec<M, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			out[i] = vector[i] * scalar;
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr vec<M, T> invert(const vec<M, T>& vector)
+	{
+		const auto result = scale(vector, T{ -1 });
+		return result;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr vec<M, T> multiply(const vec<M, T>& vector1, const vec<M, T>& vector2)
+	{
+		vec<M, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			out[i] = vector1[i] * vector2[i];
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr vec<M, T> accumulate(const vec<M, T>& vector1, const vec<M, T>& vector2)
+	{
+		vec<M, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			out[i] = vector1[i] + vector2[i];
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr T total(const vec<M, T>& vector)
+	{
+		auto out = T{ 0 };
+
+		for (auto i = 0; i < M; i++)
+		{
+			out += vector[i];
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr T magnitude(const vec<M, T>& vector)
+	{
+		const auto product = multiply(vector, vector);
+		const auto sum = total(p);
+		const auto root = std::sqrt(s);
+
+		return root;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr vec<M, T>&& normalize(const vec<M, T>& vector)
+	{
+		const auto length = magnitude(vector);
+		const auto factor = 1 / length;
+		const auto result = scale(vector, factor);
+
+		return result;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr T distance(const vec<M, T>& vector1, const vec<M, T>& vector2)
+	{
+		const auto reverse = invert(vector2);
+		const auto difference = accumulate(vector1, reverse);
+		const auto length = magnitude(difference);
+
+		return length;
+	}
+#pragma endregion
+}
+class Shader
 {
 private:
 	const GLuint _type;
@@ -71,7 +272,7 @@ private:
 	GLuint _shader_id;
 
 public:
-	shader(const GLuint type, const GLuint program_id, std::string_view filepath)
+	Shader(const GLuint type, const GLuint program_id, std::string_view filepath)
 		: _type{ type }, _program_id{ program_id }
 	{
 		std::fstream file(filepath.data());
@@ -79,6 +280,7 @@ public:
 		if (!file.good())
 		{
 			PANIC("Could not read shader source file");
+			panic("failed to read something");
 		}
 
 		auto size = std::filesystem::file_size(filepath);
@@ -105,7 +307,7 @@ class shader_factory
 {
 private:
 	const GLuint _program_id;
-	std::vector<shader> _shaders;
+	std::vector<Shader> _shaders;
 
 public:
 	shader_factory(const GLuint program_id)
@@ -116,7 +318,7 @@ public:
 public:
 	void compile_shader(const GLuint type, std::string_view filepath)
 	{
-		_shaders.emplace_back(shader(type, _program_id, filepath));
+		_shaders.emplace_back(Shader(type, _program_id, filepath));
 	}
 
 public:
@@ -142,15 +344,15 @@ public:
 		glUseProgram(_program_id);
 	}
 
-	const GLuint locate_uniform(std::string_view identifier)
+	const GLuint locate_uniform(const std::string& identifier)
 	{
 		return glGetUniformLocation(_program_id, identifier.data());
 	}
 
-	void upload_matrix(const glm::mat4& matrix, std::string_view identifier)
+	void upload_matrix(const geo::mat4& matrix, const std::string& identifier)
 	{
 		auto matrix_id = locate_uniform(identifier);
-		glUniformMatrix4fv(matrix_id, 1, GL_FALSE, glm::value_ptr(matrix));
+		glUniformMatrix4fv(matrix_id, 1, GL_FALSE, geo::value_ptr(matrix));
 	}
 
 public:
@@ -368,8 +570,8 @@ public:
 class camera
 {
 private:
-	glm::vec3 _pos, _dir, _acc;
-	glm::vec3 _vel;
+	geo::vec3 _pos, _dir, _acc;
+	geo::vec3 _vel;
 	float _yaw, _pitch;
 
 private:
@@ -383,22 +585,23 @@ private:
 	bool _locked;
 
 private:
-	static constexpr glm::vec3 _up{ 0, 1, 0 };
+	static constexpr geo::vec3 _up{ 0.0f, 1.0f, 0.0f };
 
 public:
-	const glm::vec3 forward() const
+	const geo::vec3 forward() const
 	{
-		return glm::normalize(glm::vec3{ -_dir.x, 0.0f, -_dir.z });
+		const auto result = geo::normalize(geo::vec3{ -_dir[0], 0.0f, -_dir.z});
+		return result;
 	}
 
-	const glm::vec3 up() const
+	const geo::vec3 up() const
 	{
 		return _up;
 	}
 
-	const glm::vec3 right() const
+	const geo::vec3 right() const
 	{
-		return glm::cross(forward(), up());
+		return geo::cross(forward(), up());
 	}
 
 private:
@@ -411,8 +614,8 @@ private:
 			_yaw -= (_mouse_old.x - _mouse.x) * _sensitivity;
 			_pitch -= (_mouse_old.y - _mouse.y) * _sensitivity;
 
-			_yaw = std::fmod(_yaw, glm::two_pi<float>());
-			_pitch = glm::clamp(_pitch, glm::radians(-85.0f), glm::radians(85.0f));
+			_yaw = std::fmod(_yaw, geo::two_pi<float>());
+			_pitch = geo::clamp(_pitch, geo::radians(-85.0f), geo::radians(85.0f));
 		}
 
 		_mouse_old = _mouse;
@@ -422,21 +625,21 @@ private:
 	{
 		_dir =
 		{
-			glm::cos(_pitch) * glm::cos(_yaw), // x
-			glm::sin(_pitch),                  // y
-			glm::cos(_pitch) * glm::sin(_yaw), // z
+			geo::cos(_pitch) * geo::cos(_yaw), // x
+			geo::sin(_pitch),                  // y
+			geo::cos(_pitch) * geo::sin(_yaw), // z
 		};
 	}
 
 	void integrate(float delta_time)
 	{
-		_pos += 4.0f * _vel * delta_time;
-		_vel += _acc * delta_time;
-		_acc = -_vel;
+		_pos = geo::accumulate(_pos, geo::scale(_vel, delta_time * 4.0f));
+		_vel = geo::accumulate(_vel, geo::scale(_acc, delta_time));
+		_acc = geo::invert(_vel);
 
-		if (glm::length(_vel) < 0.01f)
+		if (geo::magnitude(_vel) < 0.01f)
 		{
-			_vel = glm::vec3{ 0.0f };
+			_vel = geo::broadcast(0.0f);
 		}
 	}
 
@@ -484,31 +687,31 @@ public:
 	}
 
 public:
-	camera(const glm::vec3 pos, const float yaw, const float pitch, const float sensitivity)
+	camera(const geo::vec3 pos, const float yaw, const float pitch, const float sensitivity)
 		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _sensitivity{ sensitivity }
 	{
-		_acc = glm::vec3{ 0.0f };
-		_vel = glm::vec3{ 0.0f };
+		_acc = geo::broadcast(0.0f);
+		_vel = geo::broadcast(0.0f);
 		update_dir();
 	}
 };
 
 struct vertex
 {
-	glm::vec4 pos;
-	glm::vec3 col;
+	geo::vec4 pos;
+	geo::vec3 col;
 };
 
-class block
+class Block
 {
 public:
-	glm::vec3 _color;
+	geo::vec3 _color;
 	std::vector<vertex> _vertices;
 	std::vector<GLuint> _indices;
 	std::vector<GLuint> _normals;
 
 public:
-	block(const glm::vec3 color)
+	Block(const geo::vec3 color)
 		: _color{ color }
 	{
 		_vertices = {};
@@ -517,25 +720,46 @@ public:
 	}
 };
 
-class subchunk
+class Subchunk
 {
 public:
 	static constexpr auto CHUNK_LENGTH = 32;
 
-public:
-	std::array<block*, CHUNK_LENGTH * CHUNK_LENGTH * CHUNK_LENGTH> _blocks;
+private:
+	std::array<std::array<std::array<Block*, CHUNK_LENGTH>, CHUNK_LENGTH>, CHUNK_LENGTH> _blocks;
 
 public:
-	block*& index(int x, int y, int z)
+	Block* operator[](std::size_t x, std::size_t y, std::size_t z)
 	{
-		return _blocks[x + (CHUNK_LENGTH * (y + (CHUNK_LENGTH * z)))];
+		return _blocks[x][y][z];
+	}
+
+public:
+	Subchunk()
+	{
+		_blocks = {};
 	}
 };
 
-class chunk
+class Chunk
 {
 public:
-	std::array<subchunk, 16> _subchunks;
+	static constexpr auto CHUNK_HEIGHT = 16;
+
+private:
+	std::array<Subchunk, CHUNK_HEIGHT> _subchunks;
+
+public:
+	Subchunk& operator[](size_t x)
+	{
+		return _subchunks[x];
+	}
+
+public:
+	Chunk()
+	{
+		_subchunks = {};
+	}
 };
 
 static constexpr auto WIDTH = 1280, HEIGHT = 720;
@@ -577,7 +801,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 	shader_program sky_program{ "C:/Users/linkc/Desktop/geo/sky" };
 
 
-	chunk* c = new chunk{};
+	Chunk* c = new Chunk{};
 
 	for (auto s = 0; s < 16; s++)
 	{
@@ -599,7 +823,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	
 
-	static std::vector<glm::vec4> verts
+	static std::vector<geo::vec4> verts
 	{
 		{ -1.0f, -1.0f, -1.0f, 1.0f, },
 		{ -1.0f, -1.0f,  1.0f, 1.0f, },
@@ -644,7 +868,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 		std::swap(verts[i], verts[i + 2]);
 	}
 
-	static std::vector<glm::vec4> cube_vertices
+	static std::vector<geo::vec4> cube_vertices
 	{
 		{  1.0f,  1.0f,  1.0f,    1.0f }, // 0 close top right
 		{  1.0f,  1.0f, -1.0f,    1.0f }, // 1 far top right
@@ -674,26 +898,26 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 		BOTTOM_FACE,
 	};
 
-	auto s = new subchunk{};
+	auto subchunk = Subchunk{};
 
-	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+	for (auto x = 0; x < Subchunk::CHUNK_LENGTH; x++)
 	{
-		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
+		for (auto y = 0; y < Subchunk::CHUNK_LENGTH; y++)
 		{
-			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
+			for (auto z = 0; z < Subchunk::CHUNK_LENGTH; z++)
 			{
-				auto xyz = glm::vec3{ x, y, z };
+				constexpr auto whole = Subchunk::CHUNK_LENGTH;
+				constexpr auto half = whole / 2;
 
-				auto center = glm::vec3{ subchunk::CHUNK_LENGTH / 2 };
+				const auto xyz = geo::vec3{ x, y, z };
+				const auto center = geo::broadcast(half);
 
-				if (glm::distance(xyz, center) < subchunk::CHUNK_LENGTH / 2)
+				const auto distance = geo::distance(xyz, center);
+
+				if (distance < half)
 				{
-					s->index(x, y, z) = new block{ glm::vec3
-					{ 
-						x / static_cast<float>(subchunk::CHUNK_LENGTH),
-						y / static_cast<float>(subchunk::CHUNK_LENGTH), 
-						z / static_cast<float>(subchunk::CHUNK_LENGTH) 
-					} };
+					const auto result = geo::scale(xyz, whole);
+					subchunk[x, y, z] = new Block{ result };
 				}
 			}
 		}
@@ -701,25 +925,28 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	auto stride_accumulator = 0;
 
-	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+	for (auto x = 0; x < Subchunk::CHUNK_LENGTH; x++)
 	{
-		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
+		for (auto y = 0; y < Subchunk::CHUNK_LENGTH; y++)
 		{
-			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
+			for (auto z = 0; z < Subchunk::CHUNK_LENGTH; z++)
 			{
-				auto b = s->index(x, y, z);
+				auto b = subchunk[x, y, z];
+
+				const auto xyz = geo::vec3{ x, y, z };
+				const auto doubled = geo::scale(xyz, 2.0f);
 
 				if (b != nullptr)
 				{
 					for (auto i = 0; i < cube_vertices.size(); i++)
 					{
-						const auto m = glm::translate(glm::vec3{ x * 2.0f, y * 2.0f, z * 2.0f });
+						const auto m = geo::translate(geo::identity(), doubled);
 
 						vertex v{};
 
 						v.pos = m * cube_vertices[i];
 
-						v.col = glm::vec3
+						v.col = geo::vec3
 						{
 							(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
 							(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
@@ -729,16 +956,16 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 						b->_vertices.emplace_back(v);
 					}
 
-					if (y + 1 < subchunk::CHUNK_LENGTH)
+					if (y + 1 < Subchunk::CHUNK_LENGTH)
 					{
-						if (s->index(x, y + 1, z) == nullptr)
+						if (subchunk[x, y + 1, z] == nullptr)
 						{
 							b->_indices.append_range(top_face);
 							b->_normals.emplace_back(TOP_FACE);
 						}
 					}
 
-					else if (y == subchunk::CHUNK_LENGTH - 1)
+					else if (y == Subchunk::CHUNK_LENGTH - 1)
 					{
 						b->_indices.append_range(top_face);
 						b->_normals.emplace_back(TOP_FACE);
@@ -747,7 +974,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 					if (y - 1 > 0)
 					{
-						if (s->index(x, y - 1, z) == nullptr)
+						if (subchunk[x, y - 1, z] == nullptr)
 						{
 							b->_indices.append_range(bottom_face);
 							b->_normals.emplace_back(BOTTOM_FACE);
@@ -761,16 +988,16 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 					}
 
 
-					if (x + 1 < subchunk::CHUNK_LENGTH)
+					if (x + 1 < Subchunk::CHUNK_LENGTH)
 					{
-						if (s->index(x + 1, y, z) == nullptr)
+						if (subchunk[x + 1, y, z] == nullptr)
 						{
 							b->_indices.append_range(right_face);
 							b->_normals.emplace_back(RIGHT_FACE);
 						}
 					}
 
-					else if (x == subchunk::CHUNK_LENGTH - 1)
+					else if (x == Subchunk::CHUNK_LENGTH - 1)
 					{
 						b->_indices.append_range(right_face);
 						b->_normals.emplace_back(RIGHT_FACE);
@@ -779,7 +1006,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 					if (x - 1 > 0)
 					{
-						if (s->index(x - 1, y, z) == nullptr)
+						if (subchunk[x - 1, y, z] == nullptr)
 						{
 							b->_indices.append_range(left_face);
 							b->_normals.emplace_back(LEFT_FACE);
@@ -793,16 +1020,16 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 					}
 
 
-					if (z + 1 < subchunk::CHUNK_LENGTH)
+					if (z + 1 < Subchunk::CHUNK_LENGTH)
 					{
-						if (s->index(x, y, z + 1) == nullptr)
+						if (subchunk[x, y, z + 1] == nullptr)
 						{
 							b->_indices.append_range(close_face);
 							b->_normals.emplace_back(CLOSE_FACE);
 						}
 					}
 
-					else if (z == subchunk::CHUNK_LENGTH - 1)
+					else if (z == Subchunk::CHUNK_LENGTH - 1)
 					{
 						b->_indices.append_range(close_face);
 						b->_normals.emplace_back(CLOSE_FACE);
@@ -811,7 +1038,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 					if (z - 1 > 0)
 					{
-						if (s->index(x, y, z - 1) == nullptr)
+						if (subchunk[x, y, z - 1] == nullptr)
 						{
 							b->_indices.append_range(far_face);
 							b->_normals.emplace_back(FAR_FACE);
@@ -840,13 +1067,13 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 	std::vector<GLuint> world_indices;
 	std::vector<GLuint> world_normals;
 
-	for (auto x = 0; x < subchunk::CHUNK_LENGTH; x++)
+	for (auto x = 0; x < Subchunk::CHUNK_LENGTH; x++)
 	{
-		for (auto y = 0; y < subchunk::CHUNK_LENGTH; y++)
+		for (auto y = 0; y < Subchunk::CHUNK_LENGTH; y++)
 		{
-			for (auto z = 0; z < subchunk::CHUNK_LENGTH; z++)
+			for (auto z = 0; z < Subchunk::CHUNK_LENGTH; z++)
 			{
-				auto b = s->index(x, y, z);
+				auto b = subchunk[x, y, z];
 
 				if (b != nullptr)
 				{
@@ -888,9 +1115,9 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, world_indices };
 
 
-	std::vector<glm::vec4> skybox(verts.size());
+	std::vector<geo::vec4> skybox(verts.size());
 	buffer sky_vertex_buffer{ GL_ARRAY_BUFFER, skybox };
-	sky_vertex_buffer.add_attribute(4, GL_FLOAT, sizeof(glm::vec4), NULL);
+	sky_vertex_buffer.add_attribute(4, GL_FLOAT, sizeof(geo::vec4), NULL);
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
@@ -899,17 +1126,16 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 	glCullFace(GL_BACK);
 
 
-	//const auto rotation = glm::quarter_pi<float>();
-	//const auto t = glm::translate(glm::vec3{ 0.0f, 0.0f, 0.0f });
-	//const auto r = glm::rotate(glm::identity<glm::mat4>(), rotation, glm::vec3{ 0.0f, 0.0f, 1.0f });
-	//const auto s = glm::scale(glm::vec3{ 5.0, 0.5f, 5.0f });
+	//const auto rotation = geo::quarter_pi<float>();
+	//const auto t = geo::translate(geo::vec3{ 0.0f, 0.0f, 0.0f });
+	//const auto r = geo::rotate(geo::identity<geo::mat4>(), rotation, geo::vec3{ 0.0f, 0.0f, 1.0f });
+	//const auto s = geo::scale(geo::vec3{ 5.0, 0.5f, 5.0f });
 	//const auto m = t * r * s;
-	auto m = glm::mat4(1.0f), sky_m = glm::mat4(1.0f), sky_mvp = glm::mat4(1.0f), sky_imvp = glm::mat4(1.0f);
-
+	auto m = geo::identity(), sky_m = m, sky_mvp = m, sky_imvp = m;
 
 	auto compute_p = [&](float fov)
 	{
-		return glm::perspectiveFov(glm::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 1.0f, 10000.0f);
+		return geo::perspectiveFov(geo::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 1.0f, 10000.0f);
 	};
 
 	auto fov = 90.0f;
@@ -917,7 +1143,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	
 
-	camera camera{ { 50.0f, 0.0f, 50.0f }, glm::radians(180.0f), glm::radians(0.0f), 0.002f};
+	camera camera{ { 50.0f, 0.0f, 50.0f }, geo::radians(180.0f), geo::radians(0.0f), 0.002f};
 
 	// let's make sure our timer stuff fires initially
 	auto timer = 0.0f; 
@@ -950,7 +1176,8 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 		if (timer > 1.0)
 		{
-			const auto title = std::format(L"geo - {} FPS", static_cast<int>(1.0f / delta_time));
+			const auto fps = static_cast<int>(1.0f / delta_time);
+			const auto title = std::format(L"geo - {} FPS", fps);
 			SetWindowText(_window.hwnd(), title.c_str());
 			last_update = current_time;
 		}
@@ -978,7 +1205,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 		camera.update(delta_time);
 
-		const auto v = glm::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
+		const auto v = geo::lookAt(camera.pos(), camera.pos() - camera.dir(), camera.up());
 		const auto pv = p * v;
 
 
@@ -996,9 +1223,9 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(world_indices.size()), GL_UNSIGNED_INT, nullptr);
 
 
-		sky_m = glm::translate(camera.pos()) * glm::scale(glm::vec3{ 1000.0f });
+		sky_m = geo::translate(geo::identity(), camera.pos()) * geo::scale(geo::mat4(1.0f), geo::vec3{1000.0f});
 		sky_mvp = pv * sky_m;
-		sky_imvp = glm::inverse(sky_mvp);
+		sky_imvp = geo::inverse(sky_mvp);
 
 		if (timer > 1.0)
 		{
