@@ -9,6 +9,7 @@
 #include <chrono>
 #include <atomic>
 #include <algorithm>
+#include <numeric>
 
 #include <array>
 #include <cstdlib>
@@ -61,12 +62,24 @@ namespace geo
 {
 	using platform_type = float;
 
+	template<typename T>
+	consteval platform_type native(T param)
+	{
+		return static_cast<platform_type>(param);
+	}
+
 
 #pragma region Floating Point Manipulation
 	template<typename T = platform_type>
 	consteval T pi()
 	{
 		return T{ 3.14159265358979323846l };
+	}
+
+	template<typename T = platform_type>
+	consteval T two_pi()
+	{
+		return 2 * pi();
 	}
 
 	template<typename T = platform_type>
@@ -116,17 +129,156 @@ namespace geo
 	{
 		mat<M, M, T> out{};
 
-		for (auto i = 0; i < M; i++)
-		{
-			for (auto j = 0; j < M; j++)
-			{
-				out[i, j] = T{ 0 };
-			}
-		}
-
 		for (auto ij = 0; ij < M; ij++)
 		{
 			out[ij, ij] = T{ 1 };
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr mat<M, M, T> null()
+	{
+		return {};
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr T determinant(const mat<M, M, T>& matrix)
+	{
+#pragma message("TODO: verify that this function works as expected")
+		auto sum = T{ 0 };
+
+		//std::iota()
+		std::array<T, M> is;
+		std::iota(is.begin(), is.end(), 0);
+
+		std::array<T, M> js;
+		std::iota(js.begin(), js.end(), 1);
+
+		auto diagonal_product = [&]()
+		{
+			auto product = T{ 1 };
+
+			// for each element each diagonal
+			for (auto l = 0; l < M; l++)
+			{
+				const auto i = is[l];
+				const auto j = js[l];
+
+				product *= matrix[i, j];
+			}
+
+			return product;
+		};
+
+		auto update_js = [&]()
+		{
+			for (auto k = 0; k < M; k++)
+			{
+				// increment and clamp the range so indices wrap back around
+				js[k]++;
+				js[k] %= M;
+			}
+		};
+
+		// for each forward diagonal
+		for (auto k = 0; k < M; k++)
+		{
+			sum += diagonal_product();
+			update_js();
+		}
+
+		// for each backward diagonal
+		for (auto k = 0; k < M; k++)
+		{
+			sum -= diagonal_product();
+			update_js();
+		}
+
+		return sum;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr mat<M, M, T> translation(const vec<M - 1, T>& vector)
+	{
+		auto out = identity<M, T>();
+
+		for (auto i = 0; i < M - 1; i++)
+		{
+			out[i, M - 1] = vector[i];
+		}
+
+		return out;
+	}
+
+	template<typename T = platform_type>
+	constexpr mat<4, 4, T> perspective(T fov, T width, T height, T front, T back)
+	{
+		// NOTE: fov is measured in radians
+		// NOTE: front -> near, back -> far
+
+		const auto reciprocal_aspect = height / width;
+		const auto reciprocal_tan = 1 / std::tan(fov / 2);
+		const auto difference = back - front;
+
+		mat<4, 4, T> out{};
+
+		out[0, 0] = reciprocal_tan * reciprocal_aspect;
+		out[1, 1] = reciprocal_tan;
+		out[2, 2] = -(back + front) / difference;
+		out[2, 3] = -(2 * back * front) / difference;
+		out[3, 2] = -1;
+
+		return out;
+	}
+
+	template<std::size_t M = 4, std::size_t N = 4, typename T = platform_type>
+	constexpr mat<M, N, T> scale(const mat<M, N, T>& matrix, T scalar)
+	{
+		mat<M, N, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			for (auto j = 0; j < N; j++)
+			{
+				out[i, j] = matrix[i, j] * scalar;
+			}
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, std::size_t R = 4, std::size_t N = 4, typename T = platform_type>
+	constexpr mat<M, N, T> multiply(const mat<M, R, T>& matrix1, const mat<R, N, T>& matrix2)
+	{
+		mat<M, N, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			for (auto j = 0; j < N; j++)
+			{
+				for (auto k = 0; k < M; k++)
+				{
+					out[i, j] += matrix1[i, k] * matrix2[k, j];
+				}
+			}
+		}
+
+		return out;
+	}
+
+	template<std::size_t M = 4, std::size_t N = 4, typename T = platform_type>
+	constexpr vec<N, T> apply(const mat<M, N, T>& matrix, const vec<N, T>& vector)
+	{
+		vec<N, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			for (auto j = 0; j < N; j++)
+			{
+				out[i] += matrix[i, j] * vector[j];
+			}
 		}
 
 		return out;
@@ -167,6 +319,39 @@ namespace geo
 		vec<M, T> out{};
 
 		for (auto i = 0; i < M; i++)
+		{
+			out[i] = scalar;
+		}
+
+		return out;
+	}
+
+	template<std::size_t M2 = 3, std::size_t M1, typename T = platform_type>
+		requires (M2 < M1)
+	constexpr vec<M2, T> truncate(const vec<M1, T>& vector)
+	{
+		vec<M2, T> out{};
+
+		for (auto i = 0; i < M2; i++)
+		{
+			out[i] = vector[i];
+		}
+
+		return out;
+	}
+
+	template<std::size_t M2 = 4, std::size_t M1, typename T = platform_type> 
+		requires (M2 > M1)
+	constexpr vec<M2, T> extend(const vec<M1, T>& vector, T scalar = T{ 1 })
+	{
+		vec<M2, T> out{};
+
+		for (auto i = 0; i < M1; i++)
+		{
+			out[i] = vector[i];
+		}
+
+		for (auto i = M1; i < M2; i++)
 		{
 			out[i] = scalar;
 		}
@@ -262,7 +447,25 @@ namespace geo
 
 		return length;
 	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr T dot(const vec<M, T>& vector1, const vec<M, T>& vector2)
+	{
+		const auto product = multiply(vector1, vector2);
+		const auto sum = total(product);
+
+		return sum;
+	}
+
+	template<std::size_t M = 4, typename T = platform_type>
+	constexpr vec<M, T> cross(const vec<M, T>& vector1, const vec<M, T>& vector2)
+	{
+		vec<M, T> out{};
+
+		return out;
+	}
 #pragma endregion
+
 }
 class Shader
 {
@@ -567,7 +770,7 @@ public:
 };
 
 
-class camera
+class Camera
 {
 private:
 	geo::vec3 _pos, _dir, _acc;
@@ -590,7 +793,7 @@ private:
 public:
 	const geo::vec3 forward() const
 	{
-		const auto result = geo::normalize(geo::vec3{ -_dir[0], 0.0f, -_dir.z});
+		const auto result = geo::normalize(geo::vec3{ -_dir[0], 0.0f, -_dir.z });
 		return result;
 	}
 
@@ -614,8 +817,8 @@ private:
 			_yaw -= (_mouse_old.x - _mouse.x) * _sensitivity;
 			_pitch -= (_mouse_old.y - _mouse.y) * _sensitivity;
 
-			_yaw = std::fmod(_yaw, geo::two_pi<float>());
-			_pitch = geo::clamp(_pitch, geo::radians(-85.0f), geo::radians(85.0f));
+			_yaw = std::fmod(_yaw, geo::two_pi());
+			_pitch = std::clamp(_pitch, geo::radians(-85.0f), geo::radians(85.0f));
 		}
 
 		_mouse_old = _mouse;
@@ -625,9 +828,9 @@ private:
 	{
 		_dir =
 		{
-			geo::cos(_pitch) * geo::cos(_yaw), // x
-			geo::sin(_pitch),                  // y
-			geo::cos(_pitch) * geo::sin(_yaw), // z
+			std::cos(_pitch) * std::cos(_yaw), // x
+			std::sin(_pitch),                  // y
+			std::cos(_pitch) * std::sin(_yaw), // z
 		};
 	}
 
@@ -639,7 +842,7 @@ private:
 
 		if (geo::magnitude(_vel) < 0.01f)
 		{
-			_vel = geo::broadcast(0.0f);
+			_vel = geo::broadcast<3>(0.0f);
 		}
 	}
 
@@ -687,11 +890,11 @@ public:
 	}
 
 public:
-	camera(const geo::vec3 pos, const float yaw, const float pitch, const float sensitivity)
+	Camera(const geo::vec3 pos, const float yaw, const float pitch, const float sensitivity)
 		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _sensitivity{ sensitivity }
 	{
-		_acc = geo::broadcast(0.0f);
-		_vel = geo::broadcast(0.0f);
+		_acc = geo::broadcast<3>(0.0f);
+		_vel = geo::broadcast<3>(0.0f);
 		update_dir();
 	}
 };
@@ -900,17 +1103,17 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	auto subchunk = Subchunk{};
 
+	constexpr auto whole = geo::native(Subchunk::CHUNK_LENGTH);
+	constexpr auto half = whole / 2;
+
 	for (auto x = 0; x < Subchunk::CHUNK_LENGTH; x++)
 	{
 		for (auto y = 0; y < Subchunk::CHUNK_LENGTH; y++)
 		{
 			for (auto z = 0; z < Subchunk::CHUNK_LENGTH; z++)
 			{
-				constexpr auto whole = Subchunk::CHUNK_LENGTH;
-				constexpr auto half = whole / 2;
-
 				const auto xyz = geo::vec3{ x, y, z };
-				const auto center = geo::broadcast(half);
+				const auto center = geo::broadcast<3>(half);
 
 				const auto distance = geo::distance(xyz, center);
 
@@ -940,18 +1143,24 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 				{
 					for (auto i = 0; i < cube_vertices.size(); i++)
 					{
-						const auto m = geo::translate(geo::identity(), doubled);
+						const auto m = geo::translation(doubled);
 
 						vertex v{};
 
-						v.pos = m * cube_vertices[i];
+						v.pos = geo::apply(m, cube_vertices[i]);
 
-						v.col = geo::vec3
+						const auto sum = geo::accumulate(cube_vertices[i], geo::broadcast(1.0f));
+						const auto quotient = geo::truncate<3>(geo::scale(sum, 1 / 2.0f));
+						const auto total = geo::accumulate(xyz, quotient);
+						
+						v.col = geo::scale(total, 1 / whole);
+
+						/*v.col = geo::vec3
 						{
 							(x + ((cube_vertices[i].x + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
 							(y + ((cube_vertices[i].y + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
 							(z + ((cube_vertices[i].z + 1.0f) / 2.0f)) / static_cast<float>(subchunk::CHUNK_LENGTH),
-						};
+						};*/
 
 						b->_vertices.emplace_back(v);
 					}
@@ -1133,9 +1342,10 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 	//const auto m = t * r * s;
 	auto m = geo::identity(), sky_m = m, sky_mvp = m, sky_imvp = m;
 
-	auto compute_p = [&](float fov)
+	auto compute_p = [&](auto fov)
 	{
-		return geo::perspectiveFov(geo::radians(fov), static_cast<float>(WIDTH), static_cast<float>(HEIGHT), 1.0f, 10000.0f);
+		const auto rads = geo::radians(fov);
+		return geo::perspective(fov, geo::native(WIDTH), geo::native(HEIGHT), 1.0f, 10000.0f);
 	};
 
 	auto fov = 90.0f;
@@ -1143,7 +1353,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	
 
-	camera camera{ { 50.0f, 0.0f, 50.0f }, geo::radians(180.0f), geo::radians(0.0f), 0.002f};
+	Camera camera{ { 50.0f, 0.0f, 50.0f }, geo::radians(180.0f), geo::radians(0.0f), 0.002f};
 
 	// let's make sure our timer stuff fires initially
 	auto timer = 0.0f; 
@@ -1223,7 +1433,9 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(world_indices.size()), GL_UNSIGNED_INT, nullptr);
 
 
-		sky_m = geo::translate(geo::identity(), camera.pos()) * geo::scale(geo::mat4(1.0f), geo::vec3{1000.0f});
+		const auto base = geo::scale(geo::identity(), geo::extend(camera.pos(), 1.f))
+
+		sky_m = geo::translation(geo::identity(), camera.pos()) * geo::scale(geo::identity(), 1000.0f);
 		sky_mvp = pv * sky_m;
 		sky_imvp = geo::inverse(sky_mvp);
 
