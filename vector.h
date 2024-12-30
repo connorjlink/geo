@@ -22,7 +22,7 @@ namespace geo
 		return out;
 	}
 
-	template<std::size_t M2 = 3, std::size_t M1, typename T = platform_type>
+	template<std::size_t M2 = 3, std::size_t M1 = 4, typename T = platform_type>
 		requires (M2 < M1)
 	constexpr vec<M2, T> truncate(const vec<M1, T>& vector)
 	{
@@ -68,18 +68,6 @@ namespace geo
 		return out;
 	}
 
-	template<std::size_t M = 4, typename T = platform_type>
-	constexpr vec<M, T> constant(T value)
-	{
-		vec<M, T> out{};
-
-		for (auto i = 0; i < M; i++)
-		{
-			out[i] = value;
-		}
-
-		return out;
-	}
 
 	// reverse the direction of the given input vector
 	template<std::size_t M = 4, typename T = platform_type>
@@ -205,7 +193,7 @@ namespace geo
 	}
 
 	template<std::size_t M = 4, typename T = platform_type>
-	constexpr vec<M, T> forward_diagonals(const mat<M, M, T>& matrix)
+	constexpr vec<M, T> _forward_diagonals(const mat<M, M, T>& matrix)
 	{
 		vec<M, T> out{};
 
@@ -225,17 +213,19 @@ namespace geo
 	}
 
 	template<std::size_t M = 4, typename T = platform_type>
-	constexpr vec<M, T> backward_diagonals(const mat<M, M, T>& matrix)
+	constexpr vec<M, T> _backward_diagonals(const mat<M, M, T>& matrix)
 	{
 		vec<M, T> out;
 
 		std::array<std::size_t, M> is;
-		std::iota(is.begin(), is.end(), 0);
-
-		std::array<std::size_t, M> js;
 		// NOTE: the following is a hack to emulate iota behavior for a decreasing range
 		auto value = M - 1;
-		std::generate(js.begin(), js.end(), [&value]() { return value--; });
+		std::generate(is.begin(), is.end(), [&value]() { return value--; });
+
+		std::array<std::size_t, M> js;
+		std::iota(js.begin(), js.end(), 0);
+		// rotate left so it starts at 1 and wraps back at end
+		std::rotate(std::begin(js), std::begin(js) + 1, std::end(js));
 
 		for (auto k = 0; k < M; k++)
 		{
@@ -254,8 +244,8 @@ namespace geo
 		matrix[M - 2] = vector1;
 		matrix[M - 1] = vector2;
 
-		const auto forward = forward_diagonals(matrix);
-		const auto backward = backward_diagonals(matrix);
+		const auto forward = _forward_diagonals(matrix);
+		const auto backward = _backward_diagonals(matrix);
 
 		return subtract(forward, backward);
 	}

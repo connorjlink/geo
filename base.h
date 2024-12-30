@@ -46,10 +46,11 @@ namespace geo
 
 		constexpr auto operator!=(const auto& other) const
 		{
-			return _data != other._data;
+			return !operator==(other);
 		}
 	};
 
+	// represents an M x N matrix
 	template<std::size_t M = 4, std::size_t N = 4, typename T = platform_type>
 	class mat
 	{
@@ -58,20 +59,42 @@ namespace geo
 
 	public:
 		template<typename... Ts>
-		mat(Ts... ts)
+		mat(Ts&&... ts)
 		{
-			_data = { static_cast<T>(ts)... };
+			static_assert(sizeof...(ts) == M, "Rowcount != M");
+
+			std::array<T, N> temp[] = { std::forward<Ts>(ts)... };
+			std::copy(temp.begin(), temp.end(), _data.begin());
 		}
 
 	public:
-		constexpr auto& operator[](std::size_t i)
+		inline constexpr auto& operator[](std::size_t i)
 		{
 			return _data[i];
 		}
 
-		constexpr const auto& operator[](std::size_t i) const
+		inline constexpr const auto& operator[](std::size_t i) const
 		{
 			return _data[i];
+		}
+
+	public:
+		constexpr bool operator==(const auto& other) const
+		{
+			for (auto i = 0; i < M; i++)
+			{
+				if (_data[i] != other[i])
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		constexpr bool operator!=(const auto& other) const
+		{
+			return !operator==(other);
 		}
 	};
 }

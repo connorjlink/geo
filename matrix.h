@@ -60,8 +60,8 @@ namespace geo
 	template<std::size_t M = 4, typename T = platform_type>
 	constexpr T determinant(const mat<M, M, T>& matrix)
 	{
-		const auto forward = forward_diagonals(matrix);
-		const auto backward = backward_diagonals(matrix);
+		const auto forward = _forward_diagonals(matrix);
+		const auto backward = _backward_diagonals(matrix);
 
 		const auto difference = total(forward) - total(backward);
 
