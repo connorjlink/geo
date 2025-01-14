@@ -63,7 +63,7 @@ namespace geo
 		{
 			static_assert(sizeof...(ts) == M, "Rowcount != M");
 
-			std::array<T, N> temp[] = { std::forward<Ts>(ts)... };
+			std::array<T, N> temp = { std::forward<Ts>(ts)... };
 			std::copy(temp.begin(), temp.end(), _data.begin());
 		}
 

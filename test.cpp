@@ -212,11 +212,19 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 #pragma region MATRIX_VALIDATION
 	if (geo::identity() != geo::mat4{ geo::vec4{ 1.0f, 0.0f, 0.0f, 0.0f },
-		geo::vec4{ 0.0f, 1.0f, 0.0f, 0.0f },
-		geo::vec4{ 0.0f, 0.0f, 1.0f, 0.0f },
-		geo::vec4{ 0.0f, 0.0f, 0.0f, 1.0f } })
+									  geo::vec4{ 0.0f, 1.0f, 0.0f, 0.0f },
+									  geo::vec4{ 0.0f, 0.0f, 1.0f, 0.0f },
+									  geo::vec4{ 0.0f, 0.0f, 0.0f, 1.0f } })
 	{
+		return -1;
+	}
 
+
+	else if (geo::null() != geo::mat4{ geo::vec4{ 0.0f, 0.0f, 0.0f, 0.0f },
+									   geo::vec4{ 0.0f, 0.0f, 0.0f, 0.0f },
+									   geo::vec4{ 0.0f, 0.0f, 0.0f, 0.0f },
+									   geo::vec4{ 0.0f, 0.0f, 0.0f, 0.0f } })
+	{
 		return -1;
 	}
 
