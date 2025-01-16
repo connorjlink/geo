@@ -9,7 +9,7 @@ namespace geo
 	template<std::size_t M = 4, typename T = platform_type>
 	constexpr mat<M, M, T> identity()
 	{
-		mat<M, M, T> out{};
+		auto out = null<M, T>();
 
 		for (auto ij = 0; ij < M; ij++)
 		{
@@ -22,7 +22,17 @@ namespace geo
 	template<std::size_t M = 4, typename T = platform_type>
 	constexpr mat<M, M, T> null()
 	{
-		return {};
+		mat<M, M, T> out{};
+
+		for (auto i = 0; i < M; i++)
+		{
+			for (auto j = 0; j < M; j++)
+			{
+				out[i][j] = T{ 0 };
+			}
+		}
+
+		return out;
 	}
 
 	template<std::size_t M = 4, std::size_t N = 4, typename T = platform_type>

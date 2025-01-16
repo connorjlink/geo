@@ -58,13 +58,22 @@ namespace geo
 		std::array<std::array<T, N>, M> _data;
 
 	public:
+		mat(const std::array<std::array<T, N>, M>& data)
+		{
+			_data = data;
+		}
+
 		template<typename... Ts>
 		mat(Ts&&... ts)
 		{
-			static_assert(sizeof...(ts) == M, "Rowcount != M");
-
-			std::array<T, N> temp = { std::forward<Ts>(ts)... };
-			std::copy(temp.begin(), temp.end(), _data.begin());
+			// const std::array<T, N>
+			auto i = 0;
+			
+			([&]()
+			{
+				_data[i] = ts;
+				++i;
+			}(), ...);
 		}
 
 	public:
