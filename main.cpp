@@ -1,21 +1,4 @@
-#include <iostream>
-#include <format>
-#include <print>
-#include <vector>
-#include <fstream>
-#include <filesystem>
-#include <cassert>
-#include <thread>
-#include <chrono>
-#include <atomic>
-#include <algorithm>
-#include <numeric>
-
-#include <array>
-#include <cstdlib>
-#include <cstdint>
-#include <cmath>
-
+import std;
 
 #include <windows.h>
 #include <winerror.h>
@@ -59,14 +42,14 @@ wglChoosePixelFormatARB_type* wglChoosePixelFormatARB;
 
 #define panic(x) std::print("{} @ {}", x, __FUNCTION__)
 
-#include "float.h"
-#include "vector.h"
-#include "matrix.h"
-#include "types.h"
+#include "flux/float.h"
+#include "flux/vector.h"
+#include "flux/matrix.h"
+#include "flux/types.h"
 
 #include "shader.h"
 
-// TODO: let's use attribute string names instead of IDs
+// let's use attribute string names instead of IDs
 GLuint _attribute_id = 0;
 
 template<typename T>
@@ -179,14 +162,17 @@ private:
 private:
 	static void* GetAnyGLFuncAddress(const char* name)
 	{
-		void* p = (void*)wglGetProcAddress(name); // load newer functions via wglGetProcAddress
+		// load newer functions via wglGetProcAddress
+		void* p = (void*)wglGetProcAddress(name);
+
 		if (p == 0 ||
 			(p == (void*)0x1) || (p == (void*)0x2) || (p == (void*)0x3) ||
 			(p == (void*)-1)) // does it return NULL - i.e. is the function not found?
 		{
 			// could be an OpenGL 1.1 function
-			HMODULE module = LoadLibraryA("opengl32.dll");
-			p = (void*)GetProcAddress(module, name); // then import directly from GL lib
+			HMODULE module = LoadLibrary(L"opengl32.dll");
+			// then import directly from GL lib
+			p = (void*)GetProcAddress(module, name); 
 		}
 
 		return p;
@@ -246,10 +232,13 @@ public:
 		typedef BOOL(APIENTRY* PFNWGLSWAPINTERVALEXTPROC)(int interval);
 		PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = nullptr;
 		wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)GetAnyGLFuncAddress("wglSwapIntervalEXT");
-		if (wglSwapIntervalEXT == nullptr) {
+		if (wglSwapIntervalEXT == nullptr)
+		{
 			MessageBox(nullptr, L"Failed to load wglSwapIntervalEXT", L"Error", MB_OK);
 		}
+
 		wglSwapIntervalEXT(0);
+
 		//const auto pointers = gladLoadGLLoader(reinterpret_cast<GLADloadproc>(wglGetProcAddress));
 		//if (!pointers)
 		//{
@@ -265,8 +254,8 @@ public:
 class Camera
 {
 private:
-	geo::vec3 _pos, _dir, _acc;
-	geo::vec3 _vel;
+	fx::vec3 _pos, _dir, _acc;
+	fx::vec3 _vel;
 	float _yaw, _pitch;
 
 private:
@@ -280,23 +269,23 @@ private:
 	bool _locked;
 
 private:
-	const geo::vec3 _up{ 0.0f, 1.0f, 0.0f };
+	const fx::vec3 _up{ 0.0f, 1.0f, 0.0f };
 
 public:
-	const geo::vec3 forward() const
+	const fx::vec3 forward() const
 	{
-		const auto result = geo::normalize(geo::vec3{ -_dir[0], 0.0f, -_dir[2] });
+		const auto result = fx::normalize(fx::vec3{ -_dir[0], 0.0f, -_dir[2] });
 		return result;
 	}
 
-	const geo::vec3 up() const
+	const fx::vec3 up() const
 	{
 		return _up;
 	}
 
-	const geo::vec3 right() const
+	const fx::vec3 right() const
 	{
-		return geo::cross(forward(), up());
+		return fx::cross(forward(), up());
 	}
 
 private:
@@ -306,11 +295,11 @@ private:
 
 		if (_locked)
 		{
-			_yaw -= (_mouse_old.x - _mouse.x) * _sensitivity;
+			_yaw   -= (_mouse_old.x - _mouse.x) * _sensitivity;
 			_pitch -= (_mouse_old.y - _mouse.y) * _sensitivity;
 
-			_yaw = std::fmod(_yaw, geo::two_pi());
-			_pitch = std::clamp(_pitch, geo::radians(-85.0f), geo::radians(85.0f));
+			_yaw   = std::fmod(_yaw, fx::two_pi());
+			_pitch = std::clamp(_pitch, fx::radians(-85.0f), fx::radians(85.0f));
 		}
 
 		_mouse_old = _mouse;
@@ -328,13 +317,13 @@ private:
 
 	void integrate(float delta_time)
 	{
-		_pos = geo::add(_pos, geo::scale(_vel, delta_time * 4.0f));
-		_vel = geo::add(_vel, geo::scale(_acc, delta_time));
-		_acc = geo::invert(_vel);
+		_pos = fx::add(_pos, fx::scale(_vel, delta_time * 4.0f));
+		_vel = fx::add(_vel, fx::scale(_acc, delta_time));
+		_acc = fx::invert(_vel);
 
-		if (geo::magnitude(_vel) < 0.01f)
+		if (fx::magnitude(_vel) < 0.01f)
 		{
-			_vel = geo::broadcast<3>(0.0f);
+			_vel = fx::broadcast<3>(0.0f);
 		}
 	}
 
@@ -356,19 +345,16 @@ private:
 public:
 	decltype(_pos)& pos()
 	{
-#pragma message("REMOVE THIS FUNCTION WHEN POSSIBLE")
 		return _pos;
 	}
 
 	decltype(_vel)& vel()
 	{
-#pragma message("REMOVE THIS FUNCTION WHEN POSSIBLE")
 		return _vel;
 	}
 
 	decltype(_dir)& dir()
 	{
-#pragma message("REMOVE THIS FUNCTION WHEN POSSIBLE")
 		return _dir;
 	}
 
@@ -382,38 +368,17 @@ public:
 	}
 
 public:
-	Camera(const geo::vec3 pos, const float yaw, const float pitch, const float sensitivity)
+	Camera(const fx::vec3 pos, const float yaw, const float pitch, const float sensitivity)
 		: _pos{ pos }, _yaw{ -yaw }, _pitch{ -pitch }, _sensitivity{ sensitivity }
 	{
-		_acc = geo::broadcast<3>(0.0f);
-		_vel = geo::broadcast<3>(0.0f);
+		_acc = fx::broadcast<3>(0.0f);
+		_vel = fx::broadcast<3>(0.0f);
 		update_dir();
 	}
 };
 
-struct vertex
-{
-	geo::vec4 pos;
-	geo::vec3 col;
-};
 
-class Block
-{
-public:
-	geo::vec3 _color;
-	std::vector<vertex> _vertices;
-	std::vector<GLuint> _indices;
-	std::vector<GLuint> _normals;
-
-public:
-	Block(const geo::vec3 color)
-		: _color{ color }
-	{
-		_vertices = {};
-		_indices = {};
-		_normals = {};
-	}
-};
+#include "geometry.h"
 
 class Subchunk
 {
@@ -421,7 +386,7 @@ public:
 	static constexpr auto CHUNK_LENGTH = 16;
 
 private:
-	std::array<std::array<std::array<Block*, CHUNK_LENGTH>, CHUNK_LENGTH>, CHUNK_LENGTH> _blocks;
+	std::array<std::array<std::array<geo::Block*, CHUNK_LENGTH>, CHUNK_LENGTH>, CHUNK_LENGTH> _blocks;
 
 public:
 	constexpr auto& operator[](std::size_t x)
@@ -488,17 +453,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 	return DefWindowProc(hwnd, message, wparam, lparam);
 }
 
-int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
-					  _In_opt_ HINSTANCE hprevinstance,
-					  _In_     LPWSTR    lpcmdline,
-					  _In_     INT       ncmdshow)
+int APIENTRY wWinMain(_In_     HINSTANCE instance,
+					  _In_opt_ HINSTANCE previnstance,
+					  _In_     LPWSTR    cmdline,
+					  _In_     INT       cmdshow)
 {
-	UNREFERENCED_PARAMETER(hprevinstance);
-	UNREFERENCED_PARAMETER(lpcmdline);
+	UNREFERENCED_PARAMETER(previnstance);
+	UNREFERENCED_PARAMETER(cmdline);
 
 	
 
-	ShowWindow(_window.hwnd(), ncmdshow);
+	ShowWindow(_window.hwnd(), cmdshow);
 	UpdateWindow(_window.hwnd());
 
 
@@ -528,7 +493,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	
 
-	static std::vector<geo::vec4> verts
+	static std::vector<fx::vec4> verts
 	{
 		{ -1.0f, -1.0f, -1.0f, 1.0f, },
 		{ -1.0f, -1.0f,  1.0f, 1.0f, },
@@ -573,7 +538,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 		std::swap(verts[i], verts[i + 2]);
 	}
 
-	static std::vector<geo::vec4> cube_vertices
+	static std::vector<fx::vec4> cube_vertices
 	{
 		{  1.0f,  1.0f,  1.0f,    1.0f }, // 0 close top right
 		{  1.0f,  1.0f, -1.0f,    1.0f }, // 1 far top right
@@ -605,7 +570,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	auto subchunk = Subchunk{};
 
-	constexpr auto whole = geo::native(Subchunk::CHUNK_LENGTH);
+	constexpr auto whole = fx::native(Subchunk::CHUNK_LENGTH);
 	constexpr auto half = whole / 2;
 
 	for (auto x = 0; x < Subchunk::CHUNK_LENGTH; x++)
@@ -614,15 +579,15 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 		{
 			for (auto z = 0; z < Subchunk::CHUNK_LENGTH; z++)
 			{
-				const auto xyz = geo::vec3{ x, y, z };
-				const auto center = geo::broadcast<3>(half);
+				const auto xyz = fx::vec3{ x, y, z };
+				const auto center = fx::broadcast<3>(half);
 
-				const auto distance = geo::distance(xyz, center);
+				const auto distance = fx::distance(xyz, center);
 
 				if (distance < half)
 				{
-					const auto result = geo::scale(xyz, whole);
-					subchunk[x][y][z] = new Block{ result };
+					const auto result = fx::scale(xyz, whole);
+					subchunk[x][y][z] = new geo::Block{ result };
 				}
 			}
 		}
@@ -638,24 +603,24 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 			{
 				auto b = subchunk[x][y][z];
 
-				const auto xyz = geo::vec3{ x, y, z };
-				const auto doubled = geo::scale(xyz, 2.0f);
+				const auto xyz = fx::vec3{ x, y, z };
+				const auto doubled = fx::scale(xyz, 2.0f);
 
 				if (b != nullptr)
 				{
 					for (auto i = 0; i < cube_vertices.size(); i++)
 					{
-						const auto m = geo::translation(doubled);
+						const auto m = fx::translation(doubled);
 
-						vertex v{};
+						geo::Vertex v{};
 
-						v.pos = geo::apply(m, cube_vertices[i]);
+						v.pos = fx::apply(m, cube_vertices[i]);
 
-						const auto sum = geo::add(cube_vertices[i], geo::broadcast(1.0f));
-						const auto quotient = geo::truncate<3>(geo::scale(sum, 1 / 2.0f));
-						const auto total = geo::add(xyz, quotient);
+						const auto sum = fx::add(cube_vertices[i], fx::broadcast(1.0f));
+						const auto quotient = fx::truncate<3>(fx::scale(sum, 1 / 2.0f));
+						const auto total = fx::add(xyz, quotient);
 						
-						v.col = geo::scale(total, 1 / whole);
+						v.col = fx::scale(total, 1 / whole);
 
 						/*v.col = geo::vec3
 						{
@@ -774,7 +739,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 		}
 	}
 
-	std::vector<vertex> world_vertices;
+	std::vector<geo::Vertex> world_vertices;
 	std::vector<GLuint> world_indices;
 	std::vector<GLuint> world_normals;
 
@@ -808,11 +773,9 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 	}
 
-	std::vector<vertex> world_vertices_transform = world_vertices;
+	std::vector<geo::Vertex> world_vertices_transform = world_vertices;
 
-	//std::vector<GLuint> world_normals(6);
-
-	static constexpr auto stride = sizeof(vertex);
+	static constexpr auto stride = sizeof(geo::Vertex);
 
 	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices_transform };
 	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(vertex, pos));
@@ -892,14 +855,14 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 			last_update = current_time;
 		}
 
-		_window.key_action(VkKeyScan('w'), [&]() { geo::add(camera.vel(), geo::scale(camera.forward(), (CAMERA_SPEED * delta_time))); });
-		_window.key_action(VkKeyScan('s'), [&]() { geo::add(camera.vel(), geo::scale(camera.forward(), (CAMERA_SPEED * delta_time))); });
-		
-		_window.key_action(VkKeyScan('d'), [&]() { geo::add(camera.vel(), geo::scale(camera.right(), (CAMERA_SPEED * delta_time))); });
-		_window.key_action(VkKeyScan('a'), [&]() { geo::add(camera.vel(), geo::scale(camera.right(), (CAMERA_SPEED * delta_time))); });
-		
-		_window.key_action(VK_SPACE, [&]() { geo::add(camera.vel(), geo::scale(camera.up(), (CAMERA_SPEED * delta_time))); });
-		_window.key_action(VK_LSHIFT, [&]() { geo::add(camera.vel(), geo::scale(camera.up(), (CAMERA_SPEED * delta_time))); });
+		_window.key_action(VkKeyScan('w'), [&]() { fx::add(camera.vel(), fx::scale(camera.forward(), (CAMERA_SPEED * delta_time))); });
+		_window.key_action(VkKeyScan('s'), [&]() { fx::add(camera.vel(), fx::scale(camera.forward(), (CAMERA_SPEED * delta_time))); });
+																		 
+		_window.key_action(VkKeyScan('d'), [&]() { fx::add(camera.vel(), fx::scale(camera.right(), (CAMERA_SPEED * delta_time))); });
+		_window.key_action(VkKeyScan('a'), [&]() { fx::add(camera.vel(), fx::scale(camera.right(), (CAMERA_SPEED * delta_time))); });
+																		 
+		_window.key_action(VK_SPACE,       [&]() { fx::add(camera.vel(), fx::scale(camera.up(), (CAMERA_SPEED * delta_time))); });
+		_window.key_action(VK_LSHIFT,      [&]() { fx::add(camera.vel(), fx::scale(camera.up(), (CAMERA_SPEED * delta_time))); });
 		
 		if (window::key_pressed(VK_MBUTTON))
 		{
@@ -915,33 +878,31 @@ int APIENTRY wWinMain(_In_     HINSTANCE hinstance,
 
 		camera.update(delta_time);
 
-		const auto v = geo::lookat(camera.pos(), camera.dir(), camera.up());
-		const auto pv = geo::multiply(p, v);
-
+		const auto v = fx::lookat(camera.pos(), camera.dir(), camera.up());
+		const auto pv = fx::multiply(p, v);
 
 		glClear(GL_DEPTH_BUFFER_BIT);
-
 
 		world_program.use();
 		world_vertex_buffer.bind(GL_DYNAMIC_DRAW);
 
 		for (auto i = 0; i < world_vertices.size(); i++)
 		{
-			world_vertices_transform[i].pos = geo::apply(pv, world_vertices[i].pos);
+			world_vertices_transform[i].pos = fx::apply(pv, world_vertices[i].pos);
 		}
 
 		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(world_indices.size()), GL_UNSIGNED_INT, nullptr);
 
 
-		sky_m = geo::multiply(geo::translation(camera.pos()), geo::scale(geo::identity(), 1000.0f));
-		sky_mvp = geo::multiply(pv, sky_m);
-		sky_imvp = geo::inverse(sky_mvp);
+		sky_m = fx::multiply(fx::translation(camera.pos()), fx::scale(fx::identity(), 1000.0f));
+		sky_mvp = fx::multiply(pv, sky_m);
+		sky_imvp = fx::inverse(sky_mvp);
 
 		if (timer > 1.0)
 		{
 			for (auto i = 0; i < verts.size(); i++)
 			{
-				skybox[i] = geo::apply(sky_mvp, verts[i]);
+				skybox[i] = fx::apply(sky_mvp, verts[i]);
 			}
 		}
 

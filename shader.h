@@ -88,7 +88,7 @@ namespace geo
 			return glGetUniformLocation(_program_id, identifier.data());
 		}
 
-		void upload_matrix(const geo::mat4& matrix, const std::string& identifier)
+		void upload_matrix(const fx::mat4& matrix, const std::string& identifier)
 		{
 			auto matrix_id = locate_uniform(identifier);
 			glUniformMatrix4fv(matrix_id, 1, GL_FALSE, &matrix[0][0]);
