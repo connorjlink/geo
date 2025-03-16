@@ -146,11 +146,10 @@
 /*
  * Using <stdint.h>
  */
-#include <stdint.h>
-typedef int32_t                 khronos_int32_t;
-typedef uint32_t                khronos_uint32_t;
-typedef int64_t                 khronos_int64_t;
-typedef uint64_t                khronos_uint64_t;
+typedef signed int                 khronos_int32_t;
+typedef unsigned int               khronos_uint32_t;
+typedef signed long long           khronos_int64_t;
+typedef unsigned long long         khronos_uint64_t;
 #define KHRONOS_SUPPORT_INT64   1
 #define KHRONOS_SUPPORT_FLOAT   1
 /*

@@ -27,12 +27,6 @@
     <ClCompile Include="example.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="matrix.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="test.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="glad.h">
@@ -41,26 +35,11 @@
     <ClInclude Include="khrplatform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vector.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="float.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="matrix.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="types.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="shader.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="test.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="base.h">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="geometry.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -80,6 +59,9 @@
       <Filter>Git Files</Filter>
     </None>
     <None Include=".gitignore">
+      <Filter>Git Files</Filter>
+    </None>
+    <None Include=".gitmodules">
       <Filter>Git Files</Filter>
     </None>
   </ItemGroup>

@@ -1,5 +1,8 @@
 import std;
 
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+
 #include <windows.h>
 #include <winerror.h>
 #include <comdef.h>
@@ -455,7 +458,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 
 int APIENTRY wWinMain(_In_     HINSTANCE instance,
 					  _In_opt_ HINSTANCE previnstance,
-					  _In_     LPWSTR    cmdline,
+					  _In_     LPWSTR     cmdline,
 					  _In_     INT       cmdshow)
 {
 	UNREFERENCED_PARAMETER(previnstance);
@@ -467,8 +470,8 @@ int APIENTRY wWinMain(_In_     HINSTANCE instance,
 	UpdateWindow(_window.hwnd());
 
 
-	ShaderProgram world_program{ "./world" };
-	ShaderProgram sky_program{ "./sky" };
+	geo::ShaderProgram world_program{ "./world" };
+	geo::ShaderProgram sky_program{ "./sky" };
 
 
 	Chunk* c = new Chunk{};
@@ -617,7 +620,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE instance,
 						v.pos = fx::apply(m, cube_vertices[i]);
 
 						const auto sum = fx::add(cube_vertices[i], fx::broadcast(1.0f));
-						const auto quotient = fx::truncate<3>(fx::scale(sum, 1 / 2.0f));
+						const auto quotient = fx::truncate<4, 3>(fx::scale(sum, 1 / 2.0f));
 						const auto total = fx::add(xyz, quotient);
 						
 						v.col = fx::scale(total, 1 / whole);
@@ -778,8 +781,8 @@ int APIENTRY wWinMain(_In_     HINSTANCE instance,
 	static constexpr auto stride = sizeof(geo::Vertex);
 
 	buffer world_vertex_buffer{ GL_ARRAY_BUFFER, world_vertices_transform };
-	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(vertex, pos));
-	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(vertex, col));
+	world_vertex_buffer.add_attribute(4, GL_FLOAT, stride, offsetof(geo::Vertex, pos));
+	world_vertex_buffer.add_attribute(3, GL_FLOAT, stride, offsetof(geo::Vertex, col));
 	
 	buffer world_normal_buffer{ GL_SHADER_STORAGE_BUFFER, world_normals };
 	world_normal_buffer.base();
@@ -787,9 +790,9 @@ int APIENTRY wWinMain(_In_     HINSTANCE instance,
 	buffer world_index_buffer{ GL_ELEMENT_ARRAY_BUFFER, world_indices };
 
 
-	std::vector<geo::vec4> skybox(verts.size());
+	std::vector<fx::vec4> skybox(verts.size());
 	buffer sky_vertex_buffer{ GL_ARRAY_BUFFER, skybox };
-	sky_vertex_buffer.add_attribute(4, GL_FLOAT, sizeof(geo::vec4), NULL);
+	sky_vertex_buffer.add_attribute(4, GL_FLOAT, sizeof(fx::vec4), NULL);
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
@@ -798,17 +801,17 @@ int APIENTRY wWinMain(_In_     HINSTANCE instance,
 	glCullFace(GL_BACK);
 
 
-	//const auto rotation = geo::quarter_pi<float>();
-	//const auto t = geo::translate(geo::vec3{ 0.0f, 0.0f, 0.0f });
-	//const auto r = geo::rotate(geo::identity<geo::mat4>(), rotation, geo::vec3{ 0.0f, 0.0f, 1.0f });
-	//const auto s = geo::scale(geo::vec3{ 5.0, 0.5f, 5.0f });
+	//const auto rotation = fx::quarter_pi<float>();
+	//const auto t = fx::translate(fx::vec3{ 0.0f, 0.0f, 0.0f });
+	//const auto r = fx::rotate(fx::identity<fx::mat4>(), rotation, fx::vec3{ 0.0f, 0.0f, 1.0f });
+	//const auto s = fx::scale(fx::vec3{ 5.0, 0.5f, 5.0f });
 	//const auto m = t * r * s;
-	auto m = geo::identity(), sky_m = m, sky_mvp = m, sky_imvp = m;
+	auto m = fx::identity(), sky_m = m, sky_mvp = m, sky_imvp = m;
 
 	auto compute_p = [&](auto fov)
 	{
-		const auto rads = geo::radians(fov);
-		return geo::perspective(fov, geo::native(WIDTH), geo::native(HEIGHT), 1.0f, 10000.0f);
+		const auto rads = fx::radians(fov);
+		return fx::perspective(fov, fx::native(WIDTH), fx::native(HEIGHT), 1.0f, 10000.0f);
 	};
 
 	auto fov = 90.0f;
@@ -816,7 +819,7 @@ int APIENTRY wWinMain(_In_     HINSTANCE instance,
 
 	
 
-	Camera camera{ geo::vec3{ 50.0f, 0.0f, 50.0f }, geo::radians(180.0f), geo::radians(0.0f), 0.002f};
+	Camera camera{ fx::vec3{ 50.0f, 0.0f, 50.0f }, fx::radians(180.0f), fx::radians(0.0f), 0.002f};
 
 	// let's make sure our timer stuff fires initially
 	auto timer = 0.0f; 
