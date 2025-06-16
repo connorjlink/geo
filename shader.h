@@ -1,6 +1,10 @@
 #ifndef GEO_SHADER_H
 #define GEO_SHADER_H
 
+#include <filesystem>
+#include <fstream>
+#include <print>
+
 namespace geo
 {
 	class Shader

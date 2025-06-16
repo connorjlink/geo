@@ -1,11 +1,13 @@
-import std;
-
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
 #include <windows.h>
 #include <winerror.h>
 #include <comdef.h>
+
+#include <iostream>
+#include <vector>
+#include <chrono>
 
 //#include <gl/gl.h>
 #include "glad.h"
